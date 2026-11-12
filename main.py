@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -83,7 +84,7 @@ def train_baseline_model(df):
     model = LinearRegression()
     model.fit(X, y)
     r2_score = model.score(X, y)  # 결정계수(R-squared) 평가 지표 산출
-    return model, r2_score, len(clean_df)
+    return model, r2_score, len(clean_df), clean_df
 
 
 # ==============================================================================
@@ -133,7 +134,7 @@ st.markdown("---")
 # 데이터 로드 및 모델 학습 및 평가
 try:
     df = load_and_prepare_data()
-    lr_model, r2_score, sample_count = train_baseline_model(df)
+    lr_model, r2_score, sample_count, clean_df = train_baseline_model(df)
     is_ready = True
 except Exception as e:
     st.error(f"데이터 로드 및 모델 학습 중 오류가 발생했습니다: {e}")
@@ -270,11 +271,13 @@ if is_ready:
     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # [메인 대시보드 3] 머신러닝 모델 성능 평가 섹션 (Model Evaluation)
+    # [메인 대시보드 3] 머신러닝 모델 성능 평가 및 선형회귀 그래프 시각화
     # --------------------------------------------------------------------------
-    st.subheader("📈 머신러닝 모델 성능 및 평가 (Model Evaluation)")
+    st.subheader(
+        "📈 머신러닝 모델 성능 평가 및 선형회귀 분석 그래프"
+    )
     st.markdown(
-        "본 시뮬레이터의 예측 신뢰도를 검증하기 위해 PhysioNet 임상 데이터셋 기반 선형회귀(Linear Regression) 모델의 통계적 지표를 평가합니다."
+        "PhysioNet 임상 데이터의 **공복 혈당(X)**과 **실측 최고 혈당(Y)** 간의 상관관계를 선형회귀 모델 추세선으로 시각화합니다."
     )
 
     ev_col1, ev_col2, ev_col3 = st.columns(3)
@@ -282,20 +285,68 @@ if is_ready:
         st.metric(
             label="학습 모델 알고리즘",
             value="Linear Regression",
-            help="공복 혈당(X)과 실측 최고 혈당(Y) 간의 선형 관계 모델링",
         )
     with ev_col2:
         st.metric(
             label="모델 결정계수 ($R^2$ Score)",
             value=f"{r2_score:.3f}",
-            help="1에 가까울수록 임상 데이터를 정확히 설명하는 모델 (0~1 사이 값)",
         )
     with ev_col3:
         st.metric(
             label="유효 학습 임상 샘플 수",
             value=f"{sample_count} 건",
-            help="결측치를 제외하고 분석에 활용된 총 대상자 수",
         )
+
+    # Matplotlib 선형회귀 산점도 그래프 생성
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    X_vals = clean_df["Fasting GLU - PDL (Lab)"]
+    y_vals = clean_df["Observed_Peak_GLU"]
+
+    # 실제 데이터 산점도
+    ax.scatter(
+        X_vals,
+        y_vals,
+        color="skyblue",
+        alpha=0.7,
+        edgecolors="k",
+        label="Clinical Data (bio.csv)",
+    )
+
+    # 선형회귀 추세선
+    X_line = np.linspace(X_vals.min(), X_vals.max(), 100).reshape(-1, 1)
+    y_line = lr_model.predict(X_line)
+    ax.plot(
+        X_line,
+        y_line,
+        color="crimson",
+        linewidth=2.5,
+        label=f"Linear Fit (y = {lr_model.coef_[0]:.2f}x + {lr_model.intercept_:.2f})",
+    )
+
+    # 현재 사용자가 입력한 시뮬레이션 지점 강조 표시
+    ax.scatter(
+        [fasting_glu],
+        [pred_peak],
+        color="orange",
+        s=150,
+        zorder=5,
+        marker="*",
+        label=f"Current Simulation (Input: {fasting_glu}, Pred: {pred_peak})",
+    )
+
+    ax.set_title(
+        "Fasting Glucose vs. Postprandial Peak Glucose Regression",
+        fontsize=12,
+        fontweight="bold",
+    )
+    ax.set_xlabel("Fasting Glucose - PDL (Lab) [mg/dL]", fontsize=10)
+    ax.set_ylabel("Observed Peak Glucose [mg/dL]", fontsize=10)
+    ax.legend(loc="upper left")
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    # Streamlit에 맷플롯립 그래프 렌더링
+    st.pyplot(fig)
 
     st.markdown("---")
 
