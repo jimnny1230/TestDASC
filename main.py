@@ -71,7 +71,7 @@ def load_and_prepare_data():
 def train_baseline_model(df):
     """
     [공학적 의미] 실제 임상 데이터(bio.csv)의 공복 혈당(X)과 최고 혈당(Y) 간의
-    선형회귀(Linear Regression) 모델을 학습시켜 개인의 기초 대사 반응 기울기를 도출합니다.
+    선형회귀(Linear Regression) 모델을 학습시키고, 모델 설명력(R2 Score)을 평가합니다.
     """
     clean_df = df.dropna(
         subset=["Fasting GLU - PDL (Lab)", "Observed_Peak_GLU"]
@@ -82,8 +82,8 @@ def train_baseline_model(df):
 
     model = LinearRegression()
     model.fit(X, y)
-    r2_score = model.score(X, y)
-    return model, r2_score
+    r2_score = model.score(X, y)  # 결정계수(R-squared) 평가 지표 산출
+    return model, r2_score, len(clean_df)
 
 
 # ==============================================================================
@@ -104,19 +104,15 @@ def predict_postprandial_glucose(
 
     # 2. 파생 변수: 식이섬유 비율 (%) 계산
     fiber_ratio = (fiber / carbs * 100) if carbs > 0 else 0.0
-    sugar_ratio = (sugars / carbs * 100) if carbs > 0 else 0.0
 
     # 3. 영양소 섭취에 따른 순수 혈당 상승폭 계산
-    # 순수 탄수화물(식이섬유 제외) 및 흡수 속도가 빠른 단순당 가중치 반영
     net_carbs = max(0, carbs - fiber)
     carb_impact = (net_carbs * 0.85) + (sugars * 0.45)
 
     # 4. 식이섬유 비율(Fiber Ratio)에 따른 혈당 피크 억제 계수 (점성 겔화 효과)
-    # 식이섬유 비율이 20% 이상일 때 최대 약 30%까지 피크 상승폭 완화
     attenuation_factor = max(0.65, 1.0 - (fiber_ratio * 0.015))
 
-    # 5. 최종 예상 식후 최고 혈당 산출 (기초 대사 + 식단 부하 * 식이섬유 감쇠율)
-    # 평균적인 식사 기준(탄수화물 50g)을 기준으로 회귀 예측치와 조화롭게 결합
+    # 5. 최종 예상 식후 최고 혈당 산출
     adjusted_base = (base_pred * 0.4) + (fasting_glu * 0.6)
     predicted_peak = adjusted_base + (
         carb_impact * attenuation_factor
@@ -134,10 +130,10 @@ st.markdown(
 )
 st.markdown("---")
 
-# 데이터 로드 및 모델 학습
+# 데이터 로드 및 모델 학습 및 평가
 try:
     df = load_and_prepare_data()
-    lr_model, r2 = train_baseline_model(df)
+    lr_model, r2_score, sample_count = train_baseline_model(df)
     is_ready = True
 except Exception as e:
     st.error(f"데이터 로드 및 모델 학습 중 오류가 발생했습니다: {e}")
@@ -186,7 +182,6 @@ if is_ready:
             help="식사 직전 공복 상태의 혈당 수치입니다.",
         )
 
-        # 당류가 총 탄수화물보다 크게 입력되는 비현실적 경우 보정 안내
         if sugars > carbs:
             st.warning(
                 "⚠️ 당류는 총 탄수화물량을 초과할 수 없어 탄수화물량과 동일하게 계산됩니다."
@@ -275,6 +270,36 @@ if is_ready:
     st.markdown("---")
 
     # --------------------------------------------------------------------------
+    # [메인 대시보드 3] 머신러닝 모델 성능 평가 섹션 (Model Evaluation)
+    # --------------------------------------------------------------------------
+    st.subheader("📈 머신러닝 모델 성능 및 평가 (Model Evaluation)")
+    st.markdown(
+        "본 시뮬레이터의 예측 신뢰도를 검증하기 위해 PhysioNet 임상 데이터셋 기반 선형회귀(Linear Regression) 모델의 통계적 지표를 평가합니다."
+    )
+
+    ev_col1, ev_col2, ev_col3 = st.columns(3)
+    with ev_col1:
+        st.metric(
+            label="학습 모델 알고리즘",
+            value="Linear Regression",
+            help="공복 혈당(X)과 실측 최고 혈당(Y) 간의 선형 관계 모델링",
+        )
+    with ev_col2:
+        st.metric(
+            label="모델 결정계수 ($R^2$ Score)",
+            value=f"{r2_score:.3f}",
+            help="1에 가까울수록 임상 데이터를 정확히 설명하는 모델 (0~1 사이 값)",
+        )
+    with ev_col3:
+        st.metric(
+            label="유효 학습 임상 샘플 수",
+            value=f"{sample_count} 건",
+            help="결측치를 제외하고 분석에 활용된 총 대상자 수",
+        )
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
     # [하단 상세 정보] 생명과학적 원리 및 원본 임상 데이터 탐색 (Expander)
     # --------------------------------------------------------------------------
     col_exp1, col_exp2 = st.columns(2)
@@ -294,7 +319,7 @@ if is_ready:
             "📂 학습에 활용된 PhysioNet 임상 데이터(bio.csv) 살펴보기"
         ):
             st.write(
-                f"본 모델은 총 **{len(df)}명**의 임상 대상자 데이터(공복 혈당 및 핑거스틱 추적 혈당)를 기반으로 기초 대사 기울기(회귀 계수: `{lr_model.coef_[0]:.2f}`)를 학습했습니다."
+                f"본 모델은 총 **{sample_count}명**의 임상 대상자 데이터(공복 혈당 및 핑거스틱 추적 혈당)를 기반으로 기초 대사 기울기(회귀 계수: `{lr_model.coef_[0]:.2f}`)를 학습했습니다."
             )
             display_cols = [
                 c
