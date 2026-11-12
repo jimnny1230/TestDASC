@@ -142,7 +142,7 @@ except Exception as e:
 if is_ready:
     # 탭 생성 (1번: 시뮬레이터, 2번: 데이터 전처리 및 상관관계 분석)
     tab1, tab2 = st.tabs(
-        ["📊 시뮬레이터 및 모델 예측", "🧹 데이터 전처리 및 EDA 분석"]
+        ["📊 시뮬레이터 및 모델 예측", "🧹 데이터 전처리 및 상관관계 분석"]
     )
 
     # --------------------------------------------------------------------------
@@ -259,40 +259,36 @@ if is_ready:
         st.pyplot(fig)
 
     # --------------------------------------------------------------------------
-    # [TAB 2] 데이터 전처리 및 EDA 분석 페이지
+    # [TAB 2] 데이터 전처리 및 상관관계 분석 페이지
     # --------------------------------------------------------------------------
     with tab2:
-        st.header("🧹 데이터 전처리 및 탐색적 분석 (EDA)")
+        st.header("🧹 데이터 전처리 및 변수 간 상관관계 분석")
         st.markdown("""
-        본 페이지에서는 머신러닝 모델 학습을 위해 원본 임상 데이터(`bio.csv`)를 어떻게 정제하고, 
-        어떤 변수들을 독립변수와 종속변수로 선택했는지 그 과정을 투명하게 공개합니다.
+        본 페이지에서는 머신러닝 모델 학습을 위해 원본 임상 데이터(`bio.csv`)를 정제한 과정과, 
+        **1) 전체 속성 간 상관관계 히트맵** 및 **2) 독립변수와 종속변수 간의 상관관계 분석 결과**를 투명하게 공개합니다.
         """)
         st.markdown("---")
 
-        # 1. 변수 선정 이유 설명
-        st.subheader("1️⃣ 독립변수 및 종속변수 정의")
+        # 1. 독립변수 및 종속변수 정의
+        st.subheader("1️⃣ 독립변수(X) 및 종속변수(Y) 선정 내역")
         col_v1, col_v2 = st.columns(2)
         with col_v1:
             st.info("""
             **📌 독립변수 (Independent Variable, $X$)**
             * **선택 속성**: `Fasting GLU - PDL (Lab)` (공복 혈당)
-            * **선정 이유**: 공복 상태의 기초 혈당 수치는 개인의 기저 대사 상태와 인슐린 저항성을 반영하는 가장 기본적인 생체 지표이며, 식후 혈당 피크에 직접적인 기저 영향을 미치기 때문에 핵심 독립변수로 선정했습니다.
+            * **선정 이유**: 공복 상태의 기초 혈당 수치는 개인의 기저 대사 상태와 인슐린 저항성을 반영하며, 식후 혈당 피크에 직접적인 기저 영향을 미치므로 메인 독립변수로 선정했습니다.
             """)
         with col_v2:
             st.success("""
             **🎯 종속변수 (Dependent Variable, $Y$)**
             * **선택 속성**: `Observed_Peak_GLU` (실측 식후 최고 혈당)
-            * **선정 이유**: 원본 데이터에 포함된 1~3차 핑거스틱(채혈식) 혈당 기록 중 최댓값을 추출하여, 식후에 도달하는 혈당의 최고점(Peak Glucose)을 모델이 학습해야 할 최종 예측 타겟으로 설정했습니다.
+            * **선정 이유**: 1~3차 핑거스틱(채혈식) 혈당 기록 중 최댓값을 추출하여, 식후에 도달하는 혈당의 최고점(Peak Glucose)을 모델이 예측해야 할 타겟으로 설정했습니다.
             """)
 
         st.markdown("---")
 
         # 2. 결측치 및 제거된 데이터 내역
         st.subheader("2️⃣ 데이터 정제 및 결측치 제거 내역")
-        st.markdown(
-            "머신러닝 모델의 정확도를 높이기 위해 분석에 필요한 핵심 수치가 누락된 결측치(Missing Values)를 정제했습니다."
-        )
-
         d_col1, d_col2, d_col3 = st.columns(3)
         with d_col1:
             st.metric("원본 데이터 총 행 수", f"{len(raw_df)} 건")
@@ -306,21 +302,19 @@ if is_ready:
         with d_col3:
             st.metric("최종 모델 학습용 샘플 수", f"{len(clean_df)} 건")
 
-        with st.expander("🔍 결측치 정제 상세 내역 보기"):
-            st.write(
-                "공복 혈당 또는 핑거스틱 혈당 데이터에 결측값이 포함된 레코드를 안전하게 필터링하여 오학습을 방지했습니다."
-            )
+        with st.expander("🔍 결측치 정제 상세 레코드 보기"):
             st.dataframe(clean_df.head(10), use_container_width=True)
 
         st.markdown("---")
 
-        # 3. 속성 간 상관관계 히트맵 (Correlation Heatmap)
-        st.subheader("3️⃣ 주요 임상 속성 간 상관관계 히트맵 (Correlation Heatmap)")
+        # 3. 전체 속성 간 상관관계 히트맵
+        st.subheader(
+            "3️⃣ [분석 1] 전체 주요 임상 속성 간 상관관계 히트맵 (Heatmap)"
+        )
         st.markdown(
-            "변수들 간의 선형적 상관관계를 파악하기 위해 주요 수치형 임상 지표(나이, BMI, 공복혈당, 당화혈색소, 인슐린, 지질 수치, 최고혈당)를 대상으로 상관계수 매트릭스를 계산하고 히트맵으로 시각화했습니다."
+            "나이, BMI, 공복혈당, 당화혈색소, 인슐린, 지질 수치 및 실측 최고혈당 등 주요 수치형 변수들 간의 다중 상관관계를 히트맵으로 시각화했습니다."
         )
 
-        # 상관관계 분석에 사용할 주요 수치형 컬럼 추출
         corr_cols = [
             "Age",
             "BMI",
@@ -339,8 +333,7 @@ if is_ready:
         if len(available_corr_cols) > 1:
             corr_matrix = clean_df[available_corr_cols].corr()
 
-            # Seaborn 히트맵 생성
-            fig_hm, ax_hm = plt.subplots(figsize=(10, 7))
+            fig_hm, ax_hm = plt.subplots(figsize=(10, 6.5))
             sns.heatmap(
                 corr_matrix,
                 annot=True,
@@ -353,13 +346,67 @@ if is_ready:
                 annot_kws={"size": 9},
             )
             ax_hm.set_title(
-                "Clinical Variables Correlation Heatmap",
-                fontsize=13,
+                "All Clinical Variables Correlation Heatmap",
+                fontsize=12,
                 fontweight="bold",
             )
             plt.xticks(rotation=45, ha="right")
             plt.tight_layout()
-
             st.pyplot(fig_hm)
-        else:
-            st.warning("상관계수를 계산할 충분한 수치형 컬럼이 없습니다.")
+
+        st.markdown("---")
+
+        # 4. 종속변수(Observed_Peak_GLU)와 독립변수들 간의 상관관계 집중 분석
+        st.subheader(
+            "4️⃣ [분석 2] 종속변수(최고혈당)와 독립변수들 간의 상관관계 비교"
+        )
+        st.markdown(
+            "우리가 예측하려는 **종속변수(`Observed_Peak_GLU`)**와 모델에 활용된 **독립변수(`Fasting GLU`)** 및 기타 생체 속성들이 각각 어느 정도의 선형 상관관계를 가지는지 막대 그래프로 추출했습니다."
+        )
+
+        if "Observed_Peak_GLU" in clean_df.columns:
+            # 종속변수와의 상관계수만 추출 후 내림차순 정렬
+            target_corr = (
+                clean_df[available_corr_cols]
+                .corr()["Observed_Peak_GLU"]
+                .drop("Observed_Peak_GLU")
+                .sort_values()
+            )
+
+            fig_bar, ax_bar = plt.subplots(figsize=(10, 5))
+            bars = ax_bar.barh(
+                target_corr.index,
+                target_corr.values,
+                color="teal",
+                alpha=0.8,
+            )
+            ax_bar.axvline(0, color="gray", linestyle="--", linewidth=1)
+            ax_bar.set_title(
+                "Correlation with Dependent Variable (Observed_Peak_GLU)",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax_bar.set_xlabel("Correlation Coefficient (r)", fontsize=10)
+            ax_bar.grid(True, linestyle="--", alpha=0.5)
+
+            # 막대 양옆에 수치 표시
+            for bar in bars:
+                width = bar.get_width()
+                ax_bar.text(
+                    width + (0.02 if width >= 0 else -0.07),
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{width:.2f}",
+                    va="center",
+                    ha="left" if width >= 0 else "right",
+                    fontsize=9,
+                    fontweight="bold",
+                )
+
+            plt.tight_layout()
+            st.pyplot(fig_bar)
+
+            st.info("""
+            💡 **[해석 및 인사이트]**
+            * 공복 혈당(`Fasting GLU`)과 당화혈색소(`A1c`) 등은 종속변수인 실측 식후 최고 혈당(`Observed_Peak_GLU`)과 뚜렷한 양(+)의 상관관계를 보여줍니다. 
+            * 이는 기초 대사 혈당이 높을 수록 식후 피크 혈당도 비례해서 상승한다는 것을 의미하며, 우리가 공복 혈당을 독립변수($X$)로 채택하여 선형회귀 모델을 구축한 강력한 통계적 근거가 됩니다.
+            """)
