@@ -10,7 +10,6 @@ st.set_page_config(
     page_title="스마트 바이오푸드 & 혈당 시뮬레이터",
     page_icon="🥗",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 DATA_URL = (
@@ -92,7 +91,9 @@ def predict_postprandial_glucose(
     return round(predicted_peak, 1), round(fiber_ratio, 1)
 
 
-# 메인 화면 UI
+# ==============================================================================
+# 2. 메인 화면 UI 구성 (사이드바 없이 본문에서 바로 조작)
+# ==============================================================================
 st.title("🥗 스마트 바이오푸드 & 혈당 스파이크 예측 시뮬레이터")
 st.markdown(
     "PhysioNet 임상 생체 데이터 기반 대사 웰니스 분석 및 AI 시뮬레이션 시스템입니다."
@@ -102,28 +103,48 @@ st.markdown("---")
 clean_df = load_and_prepare_data()
 lr_model, r2_score = train_baseline_model(clean_df)
 
-# 사이드바 입력
-st.sidebar.header("🍽️ 식단 및 생체 지표 입력")
-with st.sidebar.form("simulation_form"):
-    carbs = st.slider("총 탄수화물 섭취량 (g)", 10, 150, 65, 5)
-    sugars = st.slider("당류 함량 (g)", 0, 100, 20, 2)
-    fiber = st.slider("식이섬유 함량 (g)", 0, 40, 6, 1)
+# 메인 화면에 입력 섹션 배치 (2단 컬럼 구조)
+st.subheader("🍽️ 식단 및 생체 지표 설정")
+col_in1, col_in2 = st.columns(2)
+
+with col_in1:
+    carbs = st.slider(
+        "총 탄수화물 섭취량 (g)",
+        min_value=10,
+        max_value=150,
+        value=65,
+        step=5,
+    )
+    sugars = st.slider(
+        "당류 함량 (g)", min_value=0, max_value=100, value=20, step=2
+    )
+
+with col_in2:
+    fiber = st.slider(
+        "식이섬유 함량 (g)", min_value=0, max_value=40, value=6, step=1
+    )
     fasting_glu = st.number_input(
-        "현재 공복 혈당 (mg/dL)", 60, 250, 95, 1
+        "현재 공복 혈당 (mg/dL)",
+        min_value=60,
+        max_value=250,
+        value=95,
+        step=1,
     )
 
-    if sugars > carbs:
-        sugars = carbs
-    submitted = st.form_submit_button(
-        "🔬 혈당 스파이크 시뮬레이션 실행", use_container_width=True
-    )
+if sugars > carbs:
+    st.warning("⚠️ 당류는 총 탄수화물량을 초과할 수 없습니다.")
+    sugars = carbs
 
+st.markdown("---")
+
+# 예측 실행
 pred_peak, fiber_ratio = predict_postprandial_glucose(
     lr_model, fasting_glu, carbs, sugars, fiber
 )
 glu_delta = round(pred_peak - fasting_glu, 1)
 
 # 메트릭 표시
+st.subheader("📊 실시간 대사 예측 결과")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric(
@@ -149,7 +170,7 @@ with c4:
 st.markdown("---")
 
 # 리스크 진단
-st.subheader("🩺 3단계 대사 건강 리스크 진단 결과")
+st.subheader("🩺 3단계 대사 건강 리스크 진단")
 if pred_peak < 140:
     st.success(
         f"### 🟢 대사 안정형 (예상 피크: {pred_peak} mg/dL)\n"
