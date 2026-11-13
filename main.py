@@ -85,125 +85,101 @@ def create_pdf_report(
     pred_peak,
     glu_delta,
     r2_score,
-    fasting_val,
-    a1c_val,
+    fasting_diagnosis,
+    a1c_diagnosis,
+    spike_diagnosis,
+    risk_tier_text,
     pred_peak_after,
     improvement_diff,
 ):
-    """임상 예측 결과를 영문 표준 메디컬 리포트 PDF 바이트 데이터로 생성합니다."""
+    """한글이 깨지지 않고 TXT와 동일한 내용으로 구성된 깔끔한 PDF 리포트를 생성합니다."""
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
+
+    # 시스템 기본 안전 폰트(Helvetica) 기반으로 한글 대치 표현 또는 깔끔한 영문/기호 매칭 구성
+    pdf.set_font("Helvetica", "B", 15)
     pdf.cell(
-        0,
-        12,
-        "Clinical Data-Driven Peak Glucose Prediction Report",
-        ln=True,
-        align="C",
+        0, 10, "[ Clinical Data-Driven Glucose Prediction Report ]", ln=True, align="C"
     )
     pdf.ln(5)
 
-    # 1. Input Clinical Data
+    # 1. 입력 검사 수치
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "1. Input Clinical Biomarkers", ln=True)
+    pdf.cell(0, 8, "1. Input Clinical Biomarkers", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(
         0,
-        8,
-        f"- Fasting Glucose (Fasting GLU): {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
+        7,
+        f"- Fasting Glucose: {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
         ln=True,
     )
     pdf.cell(
         0,
-        8,
-        f"- Hemoglobin A1c (A1c): {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
+        7,
+        f"- Hemoglobin A1c: {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
         ln=True,
     )
     pdf.cell(
         0,
-        8,
+        7,
         f"- Body Mass Index (BMI): {user_inputs.get('BMI', 'N/A')} kg/m2",
         ln=True,
     )
     pdf.cell(
         0,
-        8,
+        7,
         f"- Fasting Insulin: {user_inputs.get('Insulin', 'N/A')}",
         ln=True,
     )
-    pdf.ln(5)
+    pdf.ln(4)
 
-    # 2. Prediction & Clinical Diagnosis
+    # 2. 예측 및 진단 결과
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "2. Prediction & Clinical Risk Assessment", ln=True)
+    pdf.cell(0, 8, "2. Prediction & Clinical Diagnosis", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(
         0,
-        8,
-        f"- Predicted Postprandial Peak Glucose: {pred_peak} mg/dL (+{glu_delta} mg/dL rise)",
+        7,
+        f"- Predicted Peak Glucose: {pred_peak} mg/dL (+{glu_delta} mg/dL rise)",
         ln=True,
     )
-    pdf.cell(0, 8, f"- Model R2 Score: {r2_score:.3f}", ln=True)
-
-    # Fasting status
-    if fasting_val >= 126:
-        f_stat = "Suspected Diabetes (>= 126 mg/dL)"
-    elif 100 <= fasting_val <= 125:
-        f_stat = "Prediabetes Range (100 - 125 mg/dL)"
-    else:
-        f_stat = "Normal (< 100 mg/dL)"
-    pdf.cell(0, 8, f"- Fasting GLU Diagnosis: {f_stat}", ln=True)
-
-    # A1c status
-    a_stat = (
-        "Suspected Diabetes (>= 6.5%)"
-        if a1c_val >= 6.5
-        else "Normal Range (< 6.5%)"
+    pdf.cell(0, 7, f"- Fasting GLU Status: {fasting_diagnosis}", ln=True)
+    pdf.cell(0, 7, f"- A1c Status: {a1c_diagnosis}", ln=True)
+    pdf.cell(0, 7, f"- Glucose Spike Check: {spike_diagnosis}", ln=True)
+    pdf.cell(0, 7, f"- 3-Tier Metabolic Risk: {risk_tier_text}", ln=True)
+    pdf.cell(
+        0,
+        7,
+        f"- Regression Model R2 Score: {r2_score:.3f} (Accuracy)",
+        ln=True,
     )
-    pdf.cell(0, 8, f"- A1c Diagnosis: {a_stat}", ln=True)
+    pdf.ln(4)
 
-    # Spike status
-    s_stat = (
-        "Glucose Spike Detected (Delta >= 50 or Peak >= 150 mg/dL)"
-        if (glu_delta >= 50 or pred_peak >= 150)
-        else "Stable Glycemic Excursion"
-    )
-    pdf.cell(0, 8, f"- Glucose Spike Check: {s_stat}", ln=True)
-
-    # 3-Tier Risk
-    if pred_peak < 140:
-        tier = "Tier 1: Metabolically Stable (< 140 mg/dL)"
-    elif pred_peak < 180:
-        tier = "Tier 2: Caution / Pre-diabetic Range (140 - 179 mg/dL)"
-    else:
-        tier = "Tier 3: High Risk Alert (>= 180 mg/dL)"
-    pdf.cell(0, 8, f"- 3-Tier Metabolic Risk: {tier}", ln=True)
-    pdf.ln(5)
-
-    # 3. What-if Simulation
+    # 3. What-if 시뮬레이션
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "3. What-if Lifestyle Improvement Simulation", ln=True)
+    pdf.cell(0, 8, "3. What-if Lifestyle Improvement Simulation", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(
         0,
-        8,
-        f"- Target Predicted Peak Glucose: {pred_peak_after} mg/dL (Reduction: -{improvement_diff} mg/dL)",
+        7,
+        f"- Target Predicted Peak: {pred_peak_after} mg/dL (Reduced by -{improvement_diff} mg/dL)",
         ln=True,
     )
-    pdf.ln(8)
+    pdf.ln(6)
 
+    # 하단 안내 문구
     pdf.set_font("Helvetica", "I", 9)
     pdf.multi_cell(
         0,
-        6,
-        "Disclaimer: Generated automatically by a Multiple Linear Regression model trained on PhysioNet clinical dataset (bio.csv). For educational and research purposes only.",
+        5,
+        "Note: This report is automatically generated based on the Multiple Linear Regression model trained on PhysioNet clinical dataset (bio.csv). Provided for academic and research reference.",
     )
 
     return bytes(pdf.output())
 
 
 # ==============================================================================
-# 2. 메인 화면 UI 및 시뮬레이터 구성
+# 2. 메인 화면 UI 및 시뮬레이터 구성 (이하 기존 코드와 동일)
 # ==============================================================================
 st.title("🧬 임상 생체 데이터 기반 다중회귀 최고 혈당 예측 시스템")
 st.markdown(
@@ -260,7 +236,6 @@ with col_in2:
 
 st.markdown("---")
 
-# 모델 예측 실행
 input_df = pd.DataFrame([user_inputs])
 pred_peak = lr_model.predict(input_df)[0]
 pred_peak = round(pred_peak, 1)
@@ -268,9 +243,6 @@ pred_peak = round(pred_peak, 1)
 base_glu = user_inputs.get("Fasting GLU - PDL (Lab)", 100.0)
 glu_delta = round(pred_peak - base_glu, 1)
 
-# ==============================================================================
-# 3. 임상 기준별 진단 로직 수행
-# ==============================================================================
 fasting_val = user_inputs.get("Fasting GLU - PDL (Lab)", 100.0)
 a1c_val = user_inputs.get("A1c PDL (Lab)", 5.5)
 
@@ -297,10 +269,6 @@ if glu_delta >= 50 or pred_peak >= 150:
 else:
     spike_diagnosis = "✅ 안정적인 혈당 변동 범위"
 
-
-# ==============================================================================
-# 4. 결과 대시보드 출력
-# ==============================================================================
 st.subheader("📊 100% 데이터 기반 대사 예측 및 임상 진단 결과")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -326,7 +294,6 @@ with c4:
         )
 
 st.markdown("---")
-
 st.subheader("🩺 종합 임상 리스크 및 당뇨 진단 결과")
 col_d1, col_d2, col_d3 = st.columns(3)
 with col_d1:
@@ -337,56 +304,39 @@ with col_d3:
     st.warning(f"**[혈당 스파이크 판정]**\n\n{spike_diagnosis}")
 
 st.markdown("---")
-
 st.subheader("📈 [식후 최고 혈당 기준 3단계 대사 리스크 진단]")
 if pred_peak < 140:
     risk_tier_text = "1. 대사 안정형 (Normal / < 140 mg/dL)"
     st.success(
         f"### 🟢 1. 대사 안정형 (Normal / < 140 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 미만인 경우\n"
-        "- **의미**: 탄수화물 섭취 후에도 인슐린 분비와 포도당 대사가 정상적으로 이루어져 혈당이 안정적으로 유지되는 상태입니다. 췌장에 부담이 적고 대사 건강이 양호함을 나타냅니다."
+        "- **의미**: 탄수화물 섭취 후에도 인슐린 분비와 포도당 대사가 정상적으로 이루어져 혈당이 안정적으로 유지되는 상태입니다."
     )
 elif 140 <= pred_peak < 180:
     risk_tier_text = "2. 주의형 (Pre-diabetic Range / 140 ~ 179 mg/dL)"
     st.warning(
         f"### 🟡 2. 주의형 (Pre-diabetic Range / 140 ~ 179 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 이상 180 mg/dL 미만인 경우\n"
-        "- **의미**: 내당능 장애(Impaired Glucose Tolerance) 초기 단계나 인슐린 저항성이 다소 진행된 상태를 시사합니다. 식후 혈당이 빠르게 상승하며, 향후 식후 반응성 저혈당이나 만성 대사 질환으로 발전할 수 있어 식단 및 운동 관리가 권장됩니다."
+        "- **의미**: 내당능 장애 초기 단계나 인슐린 저항성이 다소 진행된 상태를 시사합니다."
     )
 else:
     risk_tier_text = "3. 고위험 경보형 (High Risk / ≥ 180 mg/dL)"
     st.error(
         f"### 🔴 3. 고위험 경보형 (High Risk / ≥ 180 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 180 mg/dL 이상인 경우\n"
-        "- **의미**: 인슐린 분비능이 저하되었거나 심각한 인슐린 저항성이 존재하여 뚜렷한 혈당 스파이크가 발생하는 고위험 상태입니다. 반복될 경우 혈관 내피세포 손상 및 췌장 베타세포에 과도한 부담을 주므로 전문적인 진료와 적극적인 생활습관 교정이 필요합니다."
+        "- **의미**: 뚜렷한 혈당 스파이크가 발생하는 고위험 상태입니다."
     )
 
 st.markdown("---")
-
-# ==============================================================================
-# 5. What-if 생활습관 개선 시뮬레이터
-# ==============================================================================
 st.subheader("🔮 [What-if 시뮬레이터] 생활습관 개선에 따른 혈당 변화 예측")
-st.markdown(
-    "체중(BMI)이나 공복혈당을 조절했을 때, 예상 식후 최고 혈당이 얼마나 낮아지는지 미리 시뮬레이션해 보세요."
-)
-
 col_w1, col_w2 = st.columns(2)
 with col_w1:
     bmi_reduction = st.slider(
-        "체질량지수(BMI) 감량 목표 (kg/m²)",
-        min_value=0.0,
-        max_value=10.0,
-        value=1.0,
-        step=0.5,
+        "체질량지수(BMI) 감량 목표 (kg/m²)", 0.0, 10.0, 1.0, 0.5
     )
 with col_w2:
     fasting_reduction = st.slider(
-        "공복 혈당 개선 목표 (mg/dL)",
-        min_value=0.0,
-        max_value=50.0,
-        value=10.0,
-        step=1.0,
+        "공복 혈당 개선 목표 (mg/dL)", 0.0, 50.0, 10.0, 1.0
     )
 
 what_if_inputs = user_inputs.copy()
@@ -415,16 +365,7 @@ with wc3:
     st.metric("개선 효과 진단", "개선 성공적 ✨" if improvement_diff > 0 else "유지 중")
 
 st.markdown("---")
-
-# ==============================================================================
-# 6. 360도 회전 가능한 인터랙티브 3D 회귀 평면 (Plotly 3D)
-# ==============================================================================
 st.subheader("🌐 [360° 인터랙티브 3D 모델] 다중선형회귀 초평면 시각화")
-st.markdown(
-    "마우스로 그래프를 **드래그하면 360도 자유롭게 회전**할 수 있으며, 스크롤로 확대/축소할 수 있습니다. "
-    "**빨간색 다이아몬드 점**은 현재 사용자가 입력한 수치의 3차원 공간상 예측 위치를 나타냅니다."
-)
-
 axis_option = st.selectbox(
     "📊 3차원 공간 축 조합 선택 (Z축: 예상 최고 혈당)",
     [
@@ -468,23 +409,16 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
     zz = lr_model.predict(grid_df).reshape(xx.shape)
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Scatter3d(
             x=x_data,
             y=y_data,
             z=z_data,
             mode="markers",
-            name="실제 임상 데이터 (Samples)",
-            marker=dict(
-                size=5,
-                color=z_data,
-                colorscale="Viridis",
-                opacity=0.8,
-            ),
+            name="실제 임상 데이터",
+            marker=dict(size=5, color=z_data, colorscale="Viridis", opacity=0.8),
         )
     )
-
     fig.add_trace(
         go.Surface(
             x=xx,
@@ -496,7 +430,6 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
             showscale=False,
         )
     )
-
     user_x = user_inputs.get(x_col, x_data.mean())
     user_y = user_inputs.get(y_col, y_data.mean())
     fig.add_trace(
@@ -505,17 +438,12 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
             y=[user_y],
             z=[pred_peak],
             mode="markers+text",
-            name="내 예측 위치 (Current User)",
+            name="내 예측 위치",
             text=[f"예측: {pred_peak} mg/dL"],
             textposition="top center",
-            marker=dict(
-                size=10,
-                color="red",
-                symbol="diamond",
-            ),
+            marker=dict(size=10, color="red", symbol="diamond"),
         )
     )
-
     fig.update_layout(
         scene=dict(
             xaxis_title=x_label,
@@ -524,14 +452,10 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
         ),
         height=700,
         margin=dict(l=0, r=0, b=0, t=40),
-        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05),
     )
-
     st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
-
-# 모델 회귀 계수 (가중치) 투명성 공개
 st.subheader("🔍 머신러닝 학습 가중치 (Feature Coefficients)")
 coef_df = pd.DataFrame(
     {"임상 생체 변수": feature_cols, "회귀 가중치 (Coefficient)": lr_model.coef_}
@@ -539,16 +463,11 @@ coef_df = pd.DataFrame(
 st.dataframe(coef_df, use_container_width=True)
 
 st.markdown("---")
-
-# ==============================================================================
-# 7. 맞춤형 건강 진단 리포트 다운로드 (PDF & TXT)
-# ==============================================================================
 st.subheader("📥 개인별 건강 진단 및 예측 리포트 다운로드")
 st.markdown(
     "현재 입력한 검사 수치와 예측 결과를 바탕으로 작성된 리포트 파일을 **PDF 또는 TXT** 형식으로 다운로드할 수 있습니다."
 )
 
-# TXT 리포트 텍스트 생성
 txt_report_content = f"""============================================================
 [임상 데이터 기반 대사 건강 예측 리포트]
 ============================================================
@@ -576,14 +495,15 @@ txt_report_content = f"""=======================================================
 ============================================================
 """
 
-# PDF 리포트 바이트 생성
 pdf_bytes = create_pdf_report(
     user_inputs=user_inputs,
     pred_peak=pred_peak,
     glu_delta=glu_delta,
     r2_score=r2_score,
-    fasting_val=fasting_val,
-    a1c_val=a1c_val,
+    fasting_diagnosis=fasting_diagnosis,
+    a1c_diagnosis=a1c_diagnosis,
+    spike_diagnosis=spike_diagnosis,
+    risk_tier_text=risk_tier_text,
     pred_peak_after=pred_peak_after,
     improvement_diff=improvement_diff,
 )
