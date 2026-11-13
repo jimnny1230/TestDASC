@@ -16,6 +16,57 @@ st.set_page_config(
     layout="wide",
 )
 
+# ==============================================================================
+# 2. 필수 의료 면책 동의 세션 및 팝업 대화상자 구현
+# ==============================================================================
+if "agreed_medical_disclaimer" not in st.session_state:
+    st.session_state.agreed_medical_disclaimer = False
+
+
+@st.dialog("⚠️ 필수 의료 법적 고지 및 면책 조항", width="large")
+def show_medical_disclaimer_modal():
+    st.markdown("### **반드시 읽고 동의하신 후 진행해 주세요.**")
+    st.markdown(
+        """
+        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; border-left: 6px solid #ffc107; color: #856404;">
+            <h3 style="margin-top:0; color: #856404;"><b>[면책 공고 및 이용 안내]</b></h3>
+            <p style="font-size: 16px; font-weight: bold; line-height: 1.6;">
+                참고용으로만 사용하시기 바랍니다. 의학적인 자문이나 진단이 필요한 경우 전문가에게 문의하세요.<br>
+                본 프로그램은 PhysioNet 임상 데이터를 학습한 학술 연구 및 교육용 머신러닝 시뮬레이터입니다. 
+                제공되는 예측 결과와 대사 리스크 진단은 통계적 추정치일 뿐이며, <b>어떠한 경우에도 의사의 전문적인 진단, 치료, 의료적 자문을 대체할 수 없습니다.</b>
+            </p>
+            <p style="font-size: 15px; margin-bottom: 0;">
+                정확한 건강 상태 진단이나 의학적인 자문이 필요한 경우, 반드시 전문 의료기관을 방문하여 전문가와 상담하시기 바랍니다.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("")
+    st.write(
+        "위 내용을 모두 숙지하였으며, 참고용 시뮬레이터로만 활용하는 것에 동의하십니까?"
+    )
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("✅ [예] 동의하고 프로그램 실행", use_container_width=True):
+            st.session_state.agreed_medical_disclaimer = True
+            st.rerun()
+    with col_btn2:
+        if st.button("❌ [아니오] 거부 (프로그램 종료)", use_container_width=True):
+            st.error(
+                "동의하지 않으시면 프로그램을 이용하실 수 없습니다. 창을 닫아주세요."
+            )
+            st.stop()
+
+
+if not st.session_state.agreed_medical_disclaimer:
+    show_medical_disclaimer_modal()
+    st.stop()
+
+# ==============================================================================
+# 3. 데이터 로드 및 전처리 함수
+# ==============================================================================
 DATA_URL = (
     "https://raw.githubusercontent.com/jimnny1230/TestDASC/main/bio.csv"
 )
@@ -94,11 +145,9 @@ def create_pdf_report(
     pred_peak_after,
     improvement_diff,
 ):
-    """한글 폰트를 동적으로 로드하여 가독성 높은 한글 PDF 리포트를 생성합니다."""
     pdf = FPDF()
     pdf.add_page()
 
-    # 나눔고딕 폰트 무료 다운로드 및 FPDF 등록 (한글 지원)
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     font_path = "/tmp/NanumGothic-Regular.ttf"
     try:
@@ -106,17 +155,14 @@ def create_pdf_report(
         pdf.add_font("NanumGothic", "", font_path)
         pdf.set_font("NanumGothic", "", 12)
     except Exception:
-        # 폰트 다운로드 실패 시 기본 폰트(영문)로 폴백
         pdf.set_font("Helvetica", "", 12)
 
-    # 타이틀
     pdf.set_font_size(15)
     pdf.cell(
         0, 10, "[ 임상 데이터 기반 대사 건강 예측 리포트 ]", ln=True, align="C"
     )
     pdf.ln(4)
 
-    # 1. 입력 검사 수치
     pdf.set_font_size(12)
     pdf.cell(0, 8, "1. 입력된 임상 검사 수치", ln=True)
     pdf.set_font_size(10)
@@ -146,7 +192,6 @@ def create_pdf_report(
     )
     pdf.ln(3)
 
-    # 2. 예측 및 진단 결과
     pdf.set_font_size(12)
     pdf.cell(0, 8, "2. 예측 및 임상 진단 결과", ln=True)
     pdf.set_font_size(10)
@@ -165,7 +210,6 @@ def create_pdf_report(
     )
     pdf.ln(3)
 
-    # 3. What-if 시뮬레이션
     pdf.set_font_size(12)
     pdf.cell(0, 8, "3. What-if 개선 시뮬레이션 결과", ln=True)
     pdf.set_font_size(10)
@@ -177,19 +221,18 @@ def create_pdf_report(
     )
     pdf.ln(6)
 
-    # 하단 안내 문구
     pdf.set_font_size(8)
     pdf.multi_cell(
         0,
         5,
-        "안내: 본 리포트는 PhysioNet 임상 데이터(bio.csv)를 학습한 다중선형회귀 모델을 기반으로 자동 생성되었습니다.",
+        "안내: 본 리포트는 참고용으로만 사용하시기 바랍니다. 의학적인 자문이나 진단이 필요한 경우 전문가에게 문의하세요.",
     )
 
     return bytes(pdf.output())
 
 
 # ==============================================================================
-# 2. 메인 화면 UI 및 시뮬레이터 구성
+# 4. 메인 화면 UI 및 시뮬레이터 구성
 # ==============================================================================
 st.title("🧬 임상 생체 데이터 기반 다중회귀 최고 혈당 예측 시스템")
 st.markdown(
@@ -500,8 +543,8 @@ txt_report_content = f"""=======================================================
 - 목표 감량/개선 적용 시 예상 최고 혈당: {pred_peak_after} mg/dL (약 {improvement_diff} mg/dL 개선 효과)
 
 ------------------------------------------------------------
-* 본 리포트는 PhysioNet 임상 데이터(bio.csv)를 학습한
-  다중선형회귀 모델을 기반으로 자동 생성되었습니다.
+* 본 리포트는 참고용으로만 사용하시기 바랍니다. 
+  의학적인 자문이나 진단이 필요한 경우 전문가에게 문의하세요.
 ============================================================
 """
 
