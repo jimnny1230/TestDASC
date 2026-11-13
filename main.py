@@ -1,6 +1,6 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 import streamlit as st
 
@@ -238,17 +238,16 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. 3차원 회귀 평면 (3D Regression Plane) 시각화 (BMI 포함 축 선택 기능)
+# 5. 360도 회전 가능한 인터랙티브 3D 회귀 평면 (Plotly 3D)
 # ==============================================================================
-st.subheader("📉 [머신러닝 시각화] 다중선형회귀 3차원 초평면 분석")
+st.subheader("🌐 [360° 인터랙티브 3D 모델] 다중선형회귀 초평면 시각화")
 st.markdown(
-    "다중선형회귀 모델은 모든 변수(공복혈당, 당화혈색소, BMI, 인슐린)를 동시에 학습합니다. "
-    "아래 선택 박스에서 **확인하고 싶은 두 변수(X축, Y축) 조합을 선택**하면 체질량지수(BMI)를 포함한 3차원 회귀 평면의 기울기를 직접 확인할 수 있습니다."
+    "마우스로 그래프를 **드래그하면 360도 자유롭게 회전**할 수 있으며, 스크롤로 확대/축소할 수 있습니다. "
+    "**빨간색 다이아몬드 점**은 현재 사용자가 입력한 수치의 3차원 공간상 예측 위치를 나타냅니다."
 )
 
-# 사용자가 X축, Y축에 배치할 2가지 변수 조합을 선택할 수 있게 함
 axis_option = st.selectbox(
-    "📊 3차원 그래프 축 조합 선택 (Z축: 예상 최고 혈당)",
+    "📊 3차원 공간 축 조합 선택 (Z축: 예상 최고 혈당)",
     [
         "1) 공복 혈당 (X) × 당화혈색소 (Y)",
         "2) 공복 혈당 (X) × 체질량지수 BMI (Y)",
@@ -258,39 +257,24 @@ axis_option = st.selectbox(
 
 if "1)" in axis_option:
     x_col, y_col = "Fasting GLU - PDL (Lab)", "A1c PDL (Lab)"
-    x_label, y_label = "Fasting GLU (mg/dL)", "A1c (%)"
+    x_label, y_label = "공복 혈당 (mg/dL)", "당화혈색소 (%)"
 elif "2)" in axis_option:
     x_col, y_col = "Fasting GLU - PDL (Lab)", "BMI"
-    x_label, y_label = "Fasting GLU (mg/dL)", "BMI (kg/m²)"
+    x_label, y_label = "공복 혈당 (mg/dL)", "BMI (kg/m²)"
 else:
     x_col, y_col = "A1c PDL (Lab)", "BMI"
-    x_label, y_label = "A1c (%)", "BMI (kg/m²)"
+    x_label, y_label = "당화혈색소 (%)", "BMI (kg/m²)"
 
 if x_col in clean_df.columns and y_col in clean_df.columns:
-    fig_3d = plt.figure(figsize=(10, 7))
-    ax = fig_3d.add_subplot(111, projection="3d")
-
     x_data = clean_df[x_col]
     y_data = clean_df[y_col]
     z_data = clean_df["Observed_Peak_GLU"]
 
-    # 실제 데이터 산점도
-    ax.scatter(
-        x_data,
-        y_data,
-        z_data,
-        c="teal",
-        marker="o",
-        alpha=0.5,
-        label="Actual Clinical Data",
-    )
-
-    # 회귀 평면 생성용 격자
-    x_surf = np.linspace(x_data.min(), x_data.max(), 20)
-    y_surf = np.linspace(y_data.min(), y_data.max(), 20)
+    # 회귀 평면 격자 생성
+    x_surf = np.linspace(x_data.min(), x_data.max(), 25)
+    y_surf = np.linspace(y_data.min(), y_data.max(), 25)
     xx, yy = np.meshgrid(x_surf, y_surf)
 
-    # 선택되지 않은 나머지 변수들은 사용자 입력값(또는 평균)으로 고정하여 평면 계산
     grid_dict = {}
     for col in feature_cols:
         if col == x_col:
@@ -305,19 +289,70 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
     grid_df = pd.DataFrame(grid_dict)[feature_cols]
     zz = lr_model.predict(grid_df).reshape(xx.shape)
 
-    # 회귀 평면 그리기
-    ax.plot_surface(xx, yy, zz, color="orange", alpha=0.4, edgecolor="none")
+    fig = go.Figure()
 
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(y_label)
-    ax.set_zlabel("Predicted Peak GLU (mg/dL)")
-    ax.set_title(
-        f"3D Regression Plane: {x_label} & {y_label}",
-        fontsize=12,
-        fontweight="bold",
+    # 1. 실제 임상 데이터 산점도 (3D Scatter)
+    fig.add_trace(
+        go.Scatter3d(
+            x=x_data,
+            y=y_data,
+            z=z_data,
+            mode="markers",
+            name="실제 임상 데이터 (Samples)",
+            marker=dict(
+                size=5,
+                color=z_data,
+                colorscale="Viridis",
+                opacity=0.8,
+            ),
+        )
     )
 
-    st.pyplot(fig_3d)
+    # 2. 머신러닝 학습 회귀 평면 (3D Surface)
+    fig.add_trace(
+        go.Surface(
+            x=xx,
+            y=yy,
+            z=zz,
+            name="다중회귀 예측 평면",
+            colorscale="Oranges",
+            opacity=0.5,
+            showscale=False,
+        )
+    )
+
+    # 3. 현재 사용자 입력 위치 강조 표시 (빨간 다이아몬드)
+    user_x = user_inputs.get(x_col, x_data.mean())
+    user_y = user_inputs.get(y_col, y_data.mean())
+    fig.add_trace(
+        go.Scatter3d(
+            x=[user_x],
+            y=[user_y],
+            z=[pred_peak],
+            mode="markers+text",
+            name="내 예측 위치 (Current User)",
+            text=[f"예측: {pred_peak} mg/dL"],
+            textposition="top center",
+            marker=dict(
+                size=10,
+                color="red",
+                symbol="diamond",
+            ),
+        )
+    )
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            zaxis_title="예상 최고 혈당 (mg/dL)",
+        ),
+        height=700,
+        margin=dict(l=0, r=0, b=0, t=40),
+        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 
