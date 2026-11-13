@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -150,7 +151,6 @@ glu_delta = round(pred_peak - base_glu, 1)
 fasting_val = user_inputs.get("Fasting GLU - PDL (Lab)", 100.0)
 a1c_val = user_inputs.get("A1c PDL (Lab)", 5.5)
 
-# 공복혈당 진단
 if fasting_val >= 126:
     fasting_diagnosis = (
         "🔴 당뇨병 의심 (공복혈당 126 mg/dL 이상 기준 충족)"
@@ -162,13 +162,11 @@ elif 100 <= fasting_val <= 125:
 else:
     fasting_diagnosis = "🟢 정상 공복혈당 (100 mg/dL 미만)"
 
-# 당화혈색소 진단
 if a1c_val >= 6.5:
     a1c_diagnosis = "🔴 당뇨병 의심 (당화혈색소 6.5% 이상 기준 충족)"
 else:
     a1c_diagnosis = "🟢 정상 범위 (당화혈색소 6.5% 미만)"
 
-# 혈당 스파이크 진단 (차이 50 이상 OR 식후 150 이상)
 if glu_delta >= 50 or pred_peak >= 150:
     spike_diagnosis = (
         "⚠️ 혈당 스파이크 의심 (식후-공복 차이 ≥ 50 mg/dL 또는 식후 혈당 ≥ 150 mg/dL)"
@@ -206,7 +204,6 @@ with c4:
 
 st.markdown("---")
 
-# 상세 진단 메시지 카드 표시
 st.subheader("🩺 종합 임상 리스크 및 당뇨 진단 결과")
 col_d1, col_d2, col_d3 = st.columns(3)
 with col_d1:
@@ -218,7 +215,6 @@ with col_d3:
 
 st.markdown("---")
 
-# [식후 최고 혈당 기준 3단계 대사 리스크 진단] 섹션 표시
 st.subheader("📈 [식후 최고 혈당 기준 3단계 대사 리스크 진단]")
 if pred_peak < 140:
     st.success(
@@ -238,6 +234,82 @@ else:
         "- **기준**: 예상 식후 최고 혈당이 180 mg/dL 이상인 경우\n"
         "- **의미**: 인슐린 분비능이 저하되었거나 심각한 인슐린 저항성이 존재하여 뚜렷한 혈당 스파이크가 발생하는 고위험 상태입니다. 반복될 경우 혈관 내피세포 손상 및 췌장 베타세포에 과도한 부담을 주므로 전문적인 진료와 적극적인 생활습관 교정이 필요합니다."
     )
+
+st.markdown("---")
+
+# ==============================================================================
+# 5. 3차원 회귀 평면 (3D Regression Plane) 시각화 추가
+# ==============================================================================
+st.subheader(
+    "📉 [머신러닝 시각화] 공복혈당·당화혈색소에 따른 3차원 회귀 평면"
+)
+st.markdown(
+    "다중선형회귀 모델이 학습한 공간적 관계를 시각화하기 위해, 가장 영향력이 큰 **공복혈당(X축)**과 **당화혈색소(Y축)**에 따른 **예상 최고 혈당(Z축)**을 3차원 곡면(Plane)으로 표현한 자료입니다."
+)
+
+if (
+    "Fasting GLU - PDL (Lab)" in clean_df.columns
+    and "A1c PDL (Lab)" in clean_df.columns
+):
+    fig_3d = plt.figure(figsize=(10, 7))
+    ax = fig_3d.add_subplot(111, projection="3d")
+
+    x_col = "Fasting GLU - PDL (Lab)"
+    y_col = "A1c PDL (Lab)"
+
+    # 산점도 데이터 (실제 데이터 샘플)
+    x_data = clean_df[x_col]
+    y_data = clean_df[y_col]
+    z_data = clean_df["Observed_Peak_GLU"]
+
+    ax.scatter(
+        x_data,
+        y_data,
+        z_data,
+        c="teal",
+        marker="o",
+        alpha=0.5,
+        label="Actual Clinical Data",
+    )
+
+    # 회귀 평면 생성용 격자(Grid) 데이터 생성
+    x_surf = np.linspace(x_data.min(), x_data.max(), 20)
+    y_surf = np.linspace(y_data.min(), y_data.max(), 20)
+    xx, yy = np.meshgrid(x_surf, y_surf)
+
+    # 모델에 넣을 나머지 변수(BMI, Insulin)는 평균값으로 고정하여 3차원 평면 계산
+    mean_bmi = (
+        clean_df["BMI"].mean() if "BMI" in clean_df.columns else 25.0
+    )
+    mean_ins = (
+        clean_df["Insulin"].mean() if "Insulin" in clean_df.columns else 10.0
+    )
+
+    # 피처 순서에 맞춰 격자 데이터 구성
+    grid_df = pd.DataFrame(
+        {
+            "Fasting GLU - PDL (Lab)": xx.ravel(),
+            "A1c PDL (Lab)": yy.ravel(),
+            "BMI": [mean_bmi] * xx.size,
+            "Insulin": [mean_ins] * xx.size,
+        }
+    )
+    # 실제 학습에 사용된 컬럼 순서만 필터링
+    grid_df = grid_df[feature_cols]
+
+    zz = lr_model.predict(grid_df).reshape(xx.shape)
+
+    # 회귀 평면 그리기
+    ax.plot_surface(xx, yy, zz, color="orange", alpha=0.4, edgecolor="none")
+
+    ax.set_xlabel("Fasting GLU (mg/dL)")
+    ax.set_ylabel("A1c (%)")
+    ax.set_zlabel("Predicted Peak GLU")
+    ax.set_title(
+        "3D Multiple Linear Regression Plane", fontsize=12, fontweight="bold"
+    )
+
+    st.pyplot(fig_3d)
 
 st.markdown("---")
 
