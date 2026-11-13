@@ -2,15 +2,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.linear_model import LinearRegression
 import streamlit as st
 
+# ==============================================================================
+# 1. 페이지 설정
+# ==============================================================================
 st.set_page_config(
-    page_title="데이터 전처리 및 상관관계 분석", page_icon="🧹", layout="wide"
+    page_title="임상 데이터 EDA 및 회귀 분석", page_icon="📊", layout="wide"
 )
 
 DATA_URL = (
     "https://raw.githubusercontent.com/jimnny1230/TestDASC/main/bio.csv"
 )
+
+# ==============================================================================
+# 2. 데이터 로드 및 전처리 함수
+# ==============================================================================
 
 
 @st.cache_data
@@ -25,14 +33,9 @@ def load_and_prepare_data():
     numeric_cols = [
         "Age",
         "BMI",
-        "Body weight",
-        "Height",
         "A1c PDL (Lab)",
         "Fasting GLU - PDL (Lab)",
         "Insulin",
-        "Triglycerides",
-        "Cholesterol",
-        "HDL",
         "#1 Contour Fingerstick GLU",
         "#2 Contour Fingerstick GLU",
         "#3 Contour Fingerstick GLU",
@@ -41,6 +44,7 @@ def load_and_prepare_data():
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # 핑거스틱 혈당 중 최댓값을 실측 최고 혈당(Target)으로 산출
     finger_cols = [
         c
         for c in [
@@ -55,135 +59,105 @@ def load_and_prepare_data():
     else:
         df["Observed_Peak_GLU"] = df["Fasting GLU - PDL (Lab)"] * 1.45
 
-    target_subset = ["Fasting GLU - PDL (Lab)", "Observed_Peak_GLU"]
-    before_count = len(df)
+    feature_cols = [
+        "Fasting GLU - PDL (Lab)",
+        "A1c PDL (Lab)",
+        "BMI",
+        "Insulin",
+    ]
+    existing_features = [c for c in feature_cols if c in df.columns]
+
+    target_subset = existing_features + ["Observed_Peak_GLU"]
     clean_df = df.dropna(subset=target_subset).copy()
-    dropped_count = before_count - len(clean_df)
-
-    return df, clean_df, dropped_count
+    return df, clean_df, existing_features
 
 
-raw_df, clean_df, dropped_count = load_and_prepare_data()
+raw_df, clean_df, feature_cols = load_and_prepare_data()
 
-st.title("🧹 데이터 전처리 및 변수 간 상관관계 분석")
-st.markdown("""
-본 페이지는 머신러닝 모델 학습을 위해 원본 임상 데이터(`bio.csv`)를 정제한 과정과, 
-**1) 전체 속성 간 상관관계 히트맵** 및 **2) 독립변수와 종속변수 간의 상관관계 분석 결과**를 독립된 페이지에서 제공합니다.
-""")
+# ==============================================================================
+# 3. 페이지 UI 구성
+# ==============================================================================
+st.title("📊 임상 데이터 탐색적 분석 (EDA) 및 다중회귀 검증")
+st.markdown(
+    "PhysioNet 임상 데이터(`bio.csv`)를 활용하여, 대사 질환 예측에 사용된 **핵심 생체 지표들의 분포와 상관관계**를 심층 분석합니다."
+)
 st.markdown("---")
 
-# 1. 독립/종속변수 정의
-st.subheader("1️⃣ 독립변수(X) 및 종속변수(Y) 선정 내역")
-col_v1, col_v2 = st.columns(2)
-with col_v1:
-    st.info("""
-    **📌 독립변수 (Independent Variable, $X$)**
-    * **선택 속성**: `Fasting GLU - PDL (Lab)` (공복 혈당)
-    * **선정 이유**: 공복 상태의 기초 혈당 수치는 개인의 기저 대사 상태와 인슐린 저항성을 반영하며, 식후 혈당 피크에 직접적인 기저 영향을 미치므로 메인 독립변수로 선정했습니다.
-    """)
-with col_v2:
-    st.success("""
-    **🎯 종속변수 (Dependent Variable, $Y$)**
-    * **선택 속성**: `Observed_Peak_GLU` (실측 식후 최고 혈당)
-    * **선정 이유**: 1~3차 핑거스틱(채혈식) 혈당 기록 중 최댓값을 추출하여, 식후에 도달하는 혈당의 최고점(Peak Glucose)을 모델이 예측해야 할 타겟으로 설정했습니다.
-    """)
+# 1. 데이터 정제 현황 요약
+st.subheader("🧹 1. 임상 데이터 정제 및 결측치 처리 현황")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("원본 데이터 샘플 수", f"{len(raw_df)} 건")
+with col2:
+    st.metric("유효 학습 샘플 수 (결측치 제외)", f"{len(clean_df)} 건")
+with col3:
+    st.metric("학습 독립변수($X$) 개수", f"{len(feature_cols)} 개")
+
+with st.expander("🔍 원본 데이터 상위 5행 미리보기"):
+    st.dataframe(raw_df.head(), use_container_width=True)
 
 st.markdown("---")
 
-# 2. 결측치 정제 내역
-st.subheader("2️⃣ 데이터 정제 및 결측치 제거 내역")
-d_col1, d_col2, d_col3 = st.columns(3)
-with d_col1:
-    st.metric("원본 데이터 총 행 수", f"{len(raw_df)} 건")
-with d_col2:
-    st.metric(
-        "결측치로 인해 제외된 행 수",
-        f"{dropped_count} 건",
-        delta="정제 완료",
-        delta_color="off",
-    )
-with d_col3:
-    st.metric("최종 모델 학습용 샘플 수", f"{len(clean_df)} 건")
+# 2. 독립변수와 종속변수 간 상관관계 분석 (Heatmap)
+st.subheader("🔥 2. 임상 생체 지표 간 상관관계 히트맵 (Correlation Heatmap)")
+st.markdown(
+    "공복혈당, 당화혈색소, BMI, 인슐린 지표들이 서로 및 실측 최고혈당(`Observed_Peak_GLU`)과 어떤 선형적 연관성을 가지는지 보여줍니다."
+)
 
-with st.expander("🔍 결측치 정제 상세 레코드 보기"):
-    st.dataframe(clean_df.head(10), use_container_width=True)
+corr_columns = feature_cols + ["Observed_Peak_GLU"]
+existing_corr_cols = [c for c in corr_columns if c in clean_df.columns]
 
-st.markdown("---")
-
-# 3. 전체 속성 간 상관관계 히트맵
-st.subheader("3️⃣ [분석 1] 전체 주요 임상 속성 간 상관관계 히트맵")
-corr_cols = [
-    "Age",
-    "BMI",
-    "A1c PDL (Lab)",
-    "Fasting GLU - PDL (Lab)",
-    "Insulin",
-    "Triglycerides",
-    "Cholesterol",
-    "HDL",
-    "Observed_Peak_GLU",
-]
-available_corr_cols = [c for c in corr_cols if c in clean_df.columns]
-
-if len(available_corr_cols) > 1:
-    corr_matrix = clean_df[available_corr_cols].corr()
-    fig_hm, ax_hm = plt.subplots(figsize=(10, 6.5))
+if len(existing_corr_cols) > 1:
+    fig, ax = plt.subplots(figsize=(8, 6))
+    corr_matrix = clean_df[existing_corr_cols].corr()
     sns.heatmap(
         corr_matrix,
         annot=True,
-        fmt=".2f",
         cmap="coolwarm",
-        vmin=-1,
-        vmax=1,
+        fmt=".2f",
         linewidths=0.5,
-        ax=ax_hm,
-        annot_kws={"size": 9},
+        ax=ax,
     )
-    ax_hm.set_title(
-        "All Clinical Variables Correlation Heatmap",
-        fontsize=12,
-        fontweight="bold",
+    plt.title(
+        "Clinical Feature Correlation Matrix", fontsize=12, fontweight="bold"
     )
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    st.pyplot(fig_hm)
+    st.pyplot(fig)
 
 st.markdown("---")
 
-# 4. 종속변수와 독립변수들 간의 상관관계 집중 분석
-st.subheader("4️⃣ [분석 2] 종속변수(최고혈당)와 독립변수들 간의 상관관계 비교")
-if "Observed_Peak_GLU" in clean_df.columns:
-    target_corr = (
-        clean_df[available_corr_cols]
-        .corr()["Observed_Peak_GLU"]
-        .drop("Observed_Peak_GLU")
-        .sort_values()
-    )
+# 3. 모델 성능 및 회귀 계수 (가중치) 비교
+st.subheader("📈 3. 다중선형회귀 모델 성능 및 변수별 영향력")
+st.markdown(
+    "각 임상 지표가 실측 최고 혈당 예측에 기여하는 통계적 가중치와 모델의 전체 설명력을 분석합니다."
+)
 
-    fig_bar, ax_bar = plt.subplots(figsize=(10, 5))
-    bars = ax_bar.barh(
-        target_corr.index, target_corr.values, color="teal", alpha=0.8
-    )
-    ax_bar.axvline(0, color="gray", linestyle="--", linewidth=1)
-    ax_bar.set_title(
-        "Correlation with Dependent Variable (Observed_Peak_GLU)",
-        fontsize=12,
-        fontweight="bold",
-    )
-    ax_bar.set_xlabel("Correlation Coefficient (r)", fontsize=10)
-    ax_bar.grid(True, linestyle="--", alpha=0.5)
+X = clean_df[feature_cols]
+y = clean_df["Observed_Peak_GLU"]
+model = LinearRegression()
+model.fit(X, y)
+r2_score = model.score(X, y)
 
-    for bar in bars:
-        width = bar.get_width()
-        ax_bar.text(
-            width + (0.02 if width >= 0 else -0.07),
-            bar.get_y() + bar.get_height() / 2,
-            f"{width:.2f}",
-            va="center",
-            ha="left" if width >= 0 else "right",
-            fontsize=9,
-            fontweight="bold",
-        )
+col_m1, col_m2 = st.columns(2)
+with col_m1:
+    st.metric("다중회귀 결정계수 ($R^2$)", f"{r2_score:.4f}")
+with col_m2:
+    st.metric("모델 학습 알고리즘", "OLS (Ordinary Least Squares)")
 
-    plt.tight_layout()
-    st.pyplot(fig_bar)
+# 회귀 계수 시각화 (막대그래프)
+coef_df = pd.DataFrame(
+    {"Feature": feature_cols, "Coefficient": model.coef_}
+).sort_values(by="Coefficient", ascending=True)
+
+fig_bar, ax_bar = plt.subplots(figsize=(8, 4))
+ax_bar.barh(
+    coef_df["Feature"], coef_df["Coefficient"], color="teal", alpha=0.8
+)
+ax_bar.set_xlabel("Regression Coefficient (Impact)")
+ax_bar.set_title(
+    "Feature Impact on Predicted Peak Glucose", fontsize=12, fontweight="bold"
+)
+st.pyplot(fig_bar)
+
+st.markdown(
+    "> **해석**: 양수 값을 갖는 계수는 해당 임상 수치가 증가할수록 식후 최고 혈당 예측치가 비례해서 상승함을 의미하며, 모델의 핵심 예측 근거로 작동합니다."
+)
