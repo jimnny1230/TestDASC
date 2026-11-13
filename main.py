@@ -238,30 +238,43 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. 3차원 회귀 평면 (3D Regression Plane) 시각화 추가
+# 5. 3차원 회귀 평면 (3D Regression Plane) 시각화 (BMI 포함 축 선택 기능)
 # ==============================================================================
-st.subheader(
-    "📉 [머신러닝 시각화] 공복혈당·당화혈색소에 따른 3차원 회귀 평면"
-)
+st.subheader("📉 [머신러닝 시각화] 다중선형회귀 3차원 초평면 분석")
 st.markdown(
-    "다중선형회귀 모델이 학습한 공간적 관계를 시각화하기 위해, 가장 영향력이 큰 **공복혈당(X축)**과 **당화혈색소(Y축)**에 따른 **예상 최고 혈당(Z축)**을 3차원 곡면(Plane)으로 표현한 자료입니다."
+    "다중선형회귀 모델은 모든 변수(공복혈당, 당화혈색소, BMI, 인슐린)를 동시에 학습합니다. "
+    "아래 선택 박스에서 **확인하고 싶은 두 변수(X축, Y축) 조합을 선택**하면 체질량지수(BMI)를 포함한 3차원 회귀 평면의 기울기를 직접 확인할 수 있습니다."
 )
 
-if (
-    "Fasting GLU - PDL (Lab)" in clean_df.columns
-    and "A1c PDL (Lab)" in clean_df.columns
-):
+# 사용자가 X축, Y축에 배치할 2가지 변수 조합을 선택할 수 있게 함
+axis_option = st.selectbox(
+    "📊 3차원 그래프 축 조합 선택 (Z축: 예상 최고 혈당)",
+    [
+        "1) 공복 혈당 (X) × 당화혈색소 (Y)",
+        "2) 공복 혈당 (X) × 체질량지수 BMI (Y)",
+        "3) 당화혈색소 (X) × 체질량지수 BMI (Y)",
+    ],
+)
+
+if "1)" in axis_option:
+    x_col, y_col = "Fasting GLU - PDL (Lab)", "A1c PDL (Lab)"
+    x_label, y_label = "Fasting GLU (mg/dL)", "A1c (%)"
+elif "2)" in axis_option:
+    x_col, y_col = "Fasting GLU - PDL (Lab)", "BMI"
+    x_label, y_label = "Fasting GLU (mg/dL)", "BMI (kg/m²)"
+else:
+    x_col, y_col = "A1c PDL (Lab)", "BMI"
+    x_label, y_label = "A1c (%)", "BMI (kg/m²)"
+
+if x_col in clean_df.columns and y_col in clean_df.columns:
     fig_3d = plt.figure(figsize=(10, 7))
     ax = fig_3d.add_subplot(111, projection="3d")
 
-    x_col = "Fasting GLU - PDL (Lab)"
-    y_col = "A1c PDL (Lab)"
-
-    # 산점도 데이터 (실제 데이터 샘플)
     x_data = clean_df[x_col]
     y_data = clean_df[y_col]
     z_data = clean_df["Observed_Peak_GLU"]
 
+    # 실제 데이터 산점도
     ax.scatter(
         x_data,
         y_data,
@@ -272,41 +285,36 @@ if (
         label="Actual Clinical Data",
     )
 
-    # 회귀 평면 생성용 격자(Grid) 데이터 생성
+    # 회귀 평면 생성용 격자
     x_surf = np.linspace(x_data.min(), x_data.max(), 20)
     y_surf = np.linspace(y_data.min(), y_data.max(), 20)
     xx, yy = np.meshgrid(x_surf, y_surf)
 
-    # 모델에 넣을 나머지 변수(BMI, Insulin)는 평균값으로 고정하여 3차원 평면 계산
-    mean_bmi = (
-        clean_df["BMI"].mean() if "BMI" in clean_df.columns else 25.0
-    )
-    mean_ins = (
-        clean_df["Insulin"].mean() if "Insulin" in clean_df.columns else 10.0
-    )
+    # 선택되지 않은 나머지 변수들은 사용자 입력값(또는 평균)으로 고정하여 평면 계산
+    grid_dict = {}
+    for col in feature_cols:
+        if col == x_col:
+            grid_dict[col] = xx.ravel()
+        elif col == y_col:
+            grid_dict[col] = yy.ravel()
+        else:
+            grid_dict[col] = [
+                user_inputs.get(col, clean_df[col].mean())
+            ] * xx.size
 
-    # 피처 순서에 맞춰 격자 데이터 구성
-    grid_df = pd.DataFrame(
-        {
-            "Fasting GLU - PDL (Lab)": xx.ravel(),
-            "A1c PDL (Lab)": yy.ravel(),
-            "BMI": [mean_bmi] * xx.size,
-            "Insulin": [mean_ins] * xx.size,
-        }
-    )
-    # 실제 학습에 사용된 컬럼 순서만 필터링
-    grid_df = grid_df[feature_cols]
-
+    grid_df = pd.DataFrame(grid_dict)[feature_cols]
     zz = lr_model.predict(grid_df).reshape(xx.shape)
 
     # 회귀 평면 그리기
     ax.plot_surface(xx, yy, zz, color="orange", alpha=0.4, edgecolor="none")
 
-    ax.set_xlabel("Fasting GLU (mg/dL)")
-    ax.set_ylabel("A1c (%)")
-    ax.set_zlabel("Predicted Peak GLU")
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_zlabel("Predicted Peak GLU (mg/dL)")
     ax.set_title(
-        "3D Multiple Linear Regression Plane", fontsize=12, fontweight="bold"
+        f"3D Regression Plane: {x_label} & {y_label}",
+        fontsize=12,
+        fontweight="bold",
     )
 
     st.pyplot(fig_3d)
