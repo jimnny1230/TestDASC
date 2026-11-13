@@ -85,90 +85,122 @@ def create_pdf_report(
     pred_peak,
     glu_delta,
     r2_score,
-    fasting_diagnosis,
-    a1c_diagnosis,
-    spike_diagnosis,
-    risk_tier_text,
+    fasting_val,
+    a1c_val,
     pred_peak_after,
     improvement_diff,
 ):
-    """한글이 깨지지 않고 TXT와 동일한 내용으로 구성된 깔끔한 PDF 리포트를 생성합니다."""
+    """PDF 인코딩 에러를 방지하기 위해 영문 표준 포맷으로 깔끔하게 리포트를 생성합니다."""
     pdf = FPDF()
     pdf.add_page()
 
-    # 시스템 기본 안전 폰트(Helvetica) 기반으로 한글 대치 표현 또는 깔끔한 영문/기호 매칭 구성
-    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.cell(
-        0, 10, "[ Clinical Data-Driven Glucose Prediction Report ]", ln=True, align="C"
+        0,
+        10,
+        "[ Clinical Data-Driven Glucose Prediction Report ]",
+        ln=True,
+        align="C",
     )
     pdf.ln(5)
 
     # 1. 입력 검사 수치
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "1. Input Clinical Biomarkers", ln=True)
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "1. Input Clinical Biomarkers", ln=True)
+    pdf.set_font("Helvetica", "", 10)
     pdf.cell(
         0,
-        7,
+        6,
         f"- Fasting Glucose: {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
         ln=True,
     )
     pdf.cell(
         0,
-        7,
+        6,
         f"- Hemoglobin A1c: {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
         ln=True,
     )
     pdf.cell(
         0,
-        7,
+        6,
         f"- Body Mass Index (BMI): {user_inputs.get('BMI', 'N/A')} kg/m2",
         ln=True,
     )
     pdf.cell(
         0,
-        7,
+        6,
         f"- Fasting Insulin: {user_inputs.get('Insulin', 'N/A')}",
         ln=True,
     )
-    pdf.ln(4)
+    pdf.ln(3)
 
     # 2. 예측 및 진단 결과
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "2. Prediction & Clinical Diagnosis", ln=True)
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "2. Prediction & Clinical Diagnosis", ln=True)
+    pdf.set_font("Helvetica", "", 10)
     pdf.cell(
         0,
-        7,
+        6,
         f"- Predicted Peak Glucose: {pred_peak} mg/dL (+{glu_delta} mg/dL rise)",
         ln=True,
     )
-    pdf.cell(0, 7, f"- Fasting GLU Status: {fasting_diagnosis}", ln=True)
-    pdf.cell(0, 7, f"- A1c Status: {a1c_diagnosis}", ln=True)
-    pdf.cell(0, 7, f"- Glucose Spike Check: {spike_diagnosis}", ln=True)
-    pdf.cell(0, 7, f"- 3-Tier Metabolic Risk: {risk_tier_text}", ln=True)
+
+    f_stat = (
+        "Suspected Diabetes (>= 126 mg/dL)"
+        if fasting_val >= 126
+        else (
+            "Prediabetes Range (100-125 mg/dL)"
+            if fasting_val >= 100
+            else "Normal (< 100 mg/dL)"
+        )
+    )
+    pdf.cell(0, 6, f"- Fasting GLU Status: {f_stat}", ln=True)
+
+    a_stat = (
+        "Suspected Diabetes (>= 6.5%)"
+        if a1c_val >= 6.5
+        else "Normal Range (< 6.5%)"
+    )
+    pdf.cell(0, 6, f"- A1c Status: {a_stat}", ln=True)
+
+    s_stat = (
+        "Glucose Spike Detected"
+        if (glu_delta >= 50 or pred_peak >= 150)
+        else "Stable Glycemic Range"
+    )
+    pdf.cell(0, 6, f"- Glucose Spike Check: {s_stat}", ln=True)
+
+    tier = (
+        "Tier 1: Metabolically Stable (< 140 mg/dL)"
+        if pred_peak < 140
+        else (
+            "Tier 2: Caution / Pre-diabetic (140-179 mg/dL)"
+            if pred_peak < 180
+            else "Tier 3: High Risk Alert (>= 180 mg/dL)"
+        )
+    )
+    pdf.cell(0, 6, f"- 3-Tier Metabolic Risk: {tier}", ln=True)
     pdf.cell(
         0,
-        7,
+        6,
         f"- Regression Model R2 Score: {r2_score:.3f} (Accuracy)",
         ln=True,
     )
-    pdf.ln(4)
+    pdf.ln(3)
 
     # 3. What-if 시뮬레이션
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "3. What-if Lifestyle Improvement Simulation", ln=True)
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "3. What-if Lifestyle Improvement Simulation", ln=True)
+    pdf.set_font("Helvetica", "", 10)
     pdf.cell(
         0,
-        7,
+        6,
         f"- Target Predicted Peak: {pred_peak_after} mg/dL (Reduced by -{improvement_diff} mg/dL)",
         ln=True,
     )
-    pdf.ln(6)
+    pdf.ln(5)
 
-    # 하단 안내 문구
-    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_font("Helvetica", "I", 8)
     pdf.multi_cell(
         0,
         5,
@@ -179,7 +211,7 @@ def create_pdf_report(
 
 
 # ==============================================================================
-# 2. 메인 화면 UI 및 시뮬레이터 구성 (이하 기존 코드와 동일)
+# 2. 메인 화면 UI 및 시뮬레이터 구성
 # ==============================================================================
 st.title("🧬 임상 생체 데이터 기반 다중회귀 최고 혈당 예측 시스템")
 st.markdown(
@@ -500,10 +532,8 @@ pdf_bytes = create_pdf_report(
     pred_peak=pred_peak,
     glu_delta=glu_delta,
     r2_score=r2_score,
-    fasting_diagnosis=fasting_diagnosis,
-    a1c_diagnosis=a1c_diagnosis,
-    spike_diagnosis=spike_diagnosis,
-    risk_tier_text=risk_tier_text,
+    fasting_val=fasting_val,
+    a1c_val=a1c_val,
     pred_peak_after=pred_peak_after,
     improvement_diff=improvement_diff,
 )
