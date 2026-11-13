@@ -26,7 +26,6 @@ def load_and_prepare_data():
     except Exception:
         df = pd.read_csv(DATA_URL, encoding="utf-8")
 
-    # 수치형 변환 대상 컬럼 지정
     numeric_cols = [
         "Age",
         "BMI",
@@ -41,7 +40,6 @@ def load_and_prepare_data():
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # [종속변수 생성] 핑거스틱 혈당 중 최댓값을 실측 최고 혈당으로 산출
     finger_cols = [
         c
         for c in [
@@ -56,7 +54,6 @@ def load_and_prepare_data():
     else:
         df["Observed_Peak_GLU"] = df["Fasting GLU - PDL (Lab)"] * 1.45
 
-    # 다중회귀 모델에 사용할 독립변수 지정 (공복혈당, 당화혈색소, BMI, 인슐린)
     feature_cols = [
         "Fasting GLU - PDL (Lab)",
         "A1c PDL (Lab)",
@@ -95,10 +92,9 @@ lr_model, r2_score = train_multiple_regression_model(clean_df, feature_cols)
 
 st.subheader("📋 개인별 임상 검사 수치 입력 (Model Input)")
 st.markdown(
-    "본인의 건강 검진 또는 임상 검사 데이터를 입력하여 예상되는 식후 최고 혈당을 예측해 보세요."
+    "본인의 건강 검진 또는 임상 검사 데이터를 입력하여 예상되는 식후 최고 혈당과 임상 진단 결과를 확인해 보세요."
 )
 
-# 4가지 핵심 변수 입력창 구성
 col_in1, col_in2 = st.columns(2)
 user_inputs = {}
 
@@ -148,8 +144,43 @@ pred_peak = round(pred_peak, 1)
 base_glu = user_inputs.get("Fasting GLU - PDL (Lab)", 100.0)
 glu_delta = round(pred_peak - base_glu, 1)
 
-# 예측 결과 대시보드
-st.subheader("📊 100% 데이터 기반 대사 예측 결과")
+# ==============================================================================
+# 3. 임상 기준별 진단 로직 수행
+# ==============================================================================
+fasting_val = user_inputs.get("Fasting GLU - PDL (Lab)", 100.0)
+a1c_val = user_inputs.get("A1c PDL (Lab)", 5.5)
+
+# 공복혈당 진단
+if fasting_val >= 126:
+    fasting_diagnosis = (
+        "🔴 당뇨병 의심 (공복혈당 126 mg/dL 이상 기준 충족)"
+    )
+elif 100 <= fasting_val <= 125:
+    fasting_diagnosis = (
+        "🟡 당뇨병 전 단계 (공복혈당 100~125 mg/dL 기준 충족)"
+    )
+else:
+    fasting_diagnosis = "🟢 정상 공복혈당 (100 mg/dL 미만)"
+
+# 당화혈색소 진단
+if a1c_val >= 6.5:
+    a1c_diagnosis = "🔴 당뇨병 의심 (당화혈색소 6.5% 이상 기준 충족)"
+else:
+    a1c_diagnosis = "🟢 정상 범위 (당화혈색소 6.5% 미만)"
+
+# 혈당 스파이크 진단 (차이 50 이상 OR 식후 150 이상)
+if glu_delta >= 50 or pred_peak >= 150:
+    spike_diagnosis = (
+        "⚠️ 혈당 스파이크 의심 (식후-공복 차이 ≥ 50 mg/dL 또는 식후 혈당 ≥ 150 mg/dL)"
+    )
+else:
+    spike_diagnosis = "✅ 안정적인 혈당 변동 범위"
+
+
+# ==============================================================================
+# 4. 결과 대시보드 출력
+# ==============================================================================
+st.subheader("📊 100% 데이터 기반 대사 예측 및 임상 진단 결과")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric(
@@ -175,11 +206,43 @@ with c4:
 
 st.markdown("---")
 
+# 상세 진단 메시지 카드 표시
+st.subheader("🩺 종합 임상 리스크 및 당뇨 진단 결과")
+col_d1, col_d2, col_d3 = st.columns(3)
+with col_d1:
+    st.info(f"**[공복혈당 기반 진단]**\n\n{fasting_diagnosis}")
+with col_d2:
+    st.success(f"**[당화혈색소(A1c) 기반 진단]**\n\n{a1c_diagnosis}")
+with col_d3:
+    st.warning(f"**[혈당 스파이크 판정]**\n\n{spike_diagnosis}")
+
+st.markdown("---")
+
+# [식후 최고 혈당 기준 3단계 대사 리스크 진단] 섹션 표시
+st.subheader("📈 [식후 최고 혈당 기준 3단계 대사 리스크 진단]")
+if pred_peak < 140:
+    st.success(
+        f"### 🟢 1. 대사 안정형 (Normal / < 140 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
+        "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 미만인 경우\n"
+        "- **의미**: 탄수화물 섭취 후에도 인슐린 분비와 포도당 대사가 정상적으로 이루어져 혈당이 안정적으로 유지되는 상태입니다. 췌장에 부담이 적고 대사 건강이 양호함을 나타냅니다."
+    )
+elif 140 <= pred_peak < 180:
+    st.warning(
+        f"### 🟡 2. 주의형 (Pre-diabetic Range / 140 ~ 179 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
+        "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 이상 180 mg/dL 미만인 경우\n"
+        "- **의미**: 내당능 장애(Impaired Glucose Tolerance) 초기 단계나 인슐린 저항성이 다소 진행된 상태를 시사합니다. 식후 혈당이 빠르게 상승하며, 향후 식후 반응성 저혈당이나 만성 대사 질환으로 발전할 수 있어 식단 및 운동 관리가 권장됩니다."
+    )
+else:
+    st.error(
+        f"### 🔴 3. 고위험 경보형 (High Risk / ≥ 180 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
+        "- **기준**: 예상 식후 최고 혈당이 180 mg/dL 이상인 경우\n"
+        "- **의미**: 인슐린 분비능이 저하되었거나 심각한 인슐린 저항성이 존재하여 뚜렷한 혈당 스파이크가 발생하는 고위험 상태입니다. 반복될 경우 혈관 내피세포 손상 및 췌장 베타세포에 과도한 부담을 주므로 전문적인 진료와 적극적인 생활습관 교정이 필요합니다."
+    )
+
+st.markdown("---")
+
 # 모델 회귀 계수 (가중치) 투명성 공개
 st.subheader("🔍 머신러닝 학습 가중치 (Feature Coefficients)")
-st.markdown(
-    "다중선형회귀 모델이 각 임상 변수에 부여한 통계적 가중치(회귀 계수)입니다."
-)
 coef_df = pd.DataFrame(
     {"임상 생체 변수": feature_cols, "회귀 가중치 (Coefficient)": lr_model.coef_}
 )
