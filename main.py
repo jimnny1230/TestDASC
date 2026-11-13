@@ -1,3 +1,5 @@
+from io import BytesIO
+import urllib.request
 from fpdf import FPDF
 import numpy as np
 import pandas as pd
@@ -85,126 +87,102 @@ def create_pdf_report(
     pred_peak,
     glu_delta,
     r2_score,
-    fasting_val,
-    a1c_val,
+    fasting_diagnosis,
+    a1c_diagnosis,
+    spike_diagnosis,
+    risk_tier_text,
     pred_peak_after,
     improvement_diff,
 ):
-    """PDF 인코딩 에러를 방지하기 위해 영문 표준 포맷으로 깔끔하게 리포트를 생성합니다."""
+    """한글 폰트를 동적으로 로드하여 가독성 높은 한글 PDF 리포트를 생성합니다."""
     pdf = FPDF()
     pdf.add_page()
 
-    pdf.set_font("Helvetica", "B", 14)
+    # 나눔고딕 폰트 무료 다운로드 및 FPDF 등록 (한글 지원)
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "/tmp/NanumGothic-Regular.ttf"
+    try:
+        urllib.request.urlretrieve(font_url, font_path)
+        pdf.add_font("NanumGothic", "", font_path)
+        pdf.set_font("NanumGothic", "", 12)
+    except Exception:
+        # 폰트 다운로드 실패 시 기본 폰트(영문)로 폴백
+        pdf.set_font("Helvetica", "", 12)
+
+    # 타이틀
+    pdf.set_font_size(15)
     pdf.cell(
-        0,
-        10,
-        "[ Clinical Data-Driven Glucose Prediction Report ]",
-        ln=True,
-        align="C",
+        0, 10, "[ 임상 데이터 기반 대사 건강 예측 리포트 ]", ln=True, align="C"
     )
-    pdf.ln(5)
+    pdf.ln(4)
 
     # 1. 입력 검사 수치
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 7, "1. Input Clinical Biomarkers", ln=True)
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font_size(12)
+    pdf.cell(0, 8, "1. 입력된 임상 검사 수치", ln=True)
+    pdf.set_font_size(10)
     pdf.cell(
         0,
         6,
-        f"- Fasting Glucose: {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
+        f"- 공복 혈당 (Fasting GLU): {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
         ln=True,
     )
     pdf.cell(
         0,
         6,
-        f"- Hemoglobin A1c: {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
+        f"- 당화혈색소 (A1c): {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
         ln=True,
     )
     pdf.cell(
         0,
         6,
-        f"- Body Mass Index (BMI): {user_inputs.get('BMI', 'N/A')} kg/m2",
+        f"- 체질량지수 (BMI): {user_inputs.get('BMI', 'N/A')} kg/m2",
         ln=True,
     )
     pdf.cell(
         0,
         6,
-        f"- Fasting Insulin: {user_inputs.get('Insulin', 'N/A')}",
+        f"- 공복 인슐린 (Insulin): {user_inputs.get('Insulin', 'N/A')}",
         ln=True,
     )
     pdf.ln(3)
 
     # 2. 예측 및 진단 결과
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 7, "2. Prediction & Clinical Diagnosis", ln=True)
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font_size(12)
+    pdf.cell(0, 8, "2. 예측 및 임상 진단 결과", ln=True)
+    pdf.set_font_size(10)
     pdf.cell(
         0,
         6,
-        f"- Predicted Peak Glucose: {pred_peak} mg/dL (+{glu_delta} mg/dL rise)",
+        f"- 예상 식후 최고 혈당 (Peak): {pred_peak} mg/dL (+{glu_delta} mg/dL 상승)",
         ln=True,
     )
-
-    f_stat = (
-        "Suspected Diabetes (>= 126 mg/dL)"
-        if fasting_val >= 126
-        else (
-            "Prediabetes Range (100-125 mg/dL)"
-            if fasting_val >= 100
-            else "Normal (< 100 mg/dL)"
-        )
-    )
-    pdf.cell(0, 6, f"- Fasting GLU Status: {f_stat}", ln=True)
-
-    a_stat = (
-        "Suspected Diabetes (>= 6.5%)"
-        if a1c_val >= 6.5
-        else "Normal Range (< 6.5%)"
-    )
-    pdf.cell(0, 6, f"- A1c Status: {a_stat}", ln=True)
-
-    s_stat = (
-        "Glucose Spike Detected"
-        if (glu_delta >= 50 or pred_peak >= 150)
-        else "Stable Glycemic Range"
-    )
-    pdf.cell(0, 6, f"- Glucose Spike Check: {s_stat}", ln=True)
-
-    tier = (
-        "Tier 1: Metabolically Stable (< 140 mg/dL)"
-        if pred_peak < 140
-        else (
-            "Tier 2: Caution / Pre-diabetic (140-179 mg/dL)"
-            if pred_peak < 180
-            else "Tier 3: High Risk Alert (>= 180 mg/dL)"
-        )
-    )
-    pdf.cell(0, 6, f"- 3-Tier Metabolic Risk: {tier}", ln=True)
+    pdf.cell(0, 6, f"- 공복혈당 진단: {fasting_diagnosis}", ln=True)
+    pdf.cell(0, 6, f"- 당화혈색소 진단: {a1c_diagnosis}", ln=True)
+    pdf.cell(0, 6, f"- 혈당 스파이크 판정: {spike_diagnosis}", ln=True)
+    pdf.cell(0, 6, f"- 3단계 대사 리스크 분류: {risk_tier_text}", ln=True)
     pdf.cell(
-        0,
-        6,
-        f"- Regression Model R2 Score: {r2_score:.3f} (Accuracy)",
-        ln=True,
+        0, 6, f"- 모델 설명력 (R2 Score): {r2_score:.3f} (Accuracy)", ln=True
     )
     pdf.ln(3)
 
     # 3. What-if 시뮬레이션
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 7, "3. What-if Lifestyle Improvement Simulation", ln=True)
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font_size(12)
+    pdf.cell(0, 8, "3. What-if 개선 시뮬레이션 결과", ln=True)
+    pdf.set_font_size(10)
     pdf.cell(
         0,
         6,
-        f"- Target Predicted Peak: {pred_peak_after} mg/dL (Reduced by -{improvement_diff} mg/dL)",
+        f"- 목표 감량/개선 적용 시 예상 최고 혈당: {pred_peak_after} mg/dL (약 {improvement_diff} mg/dL 개선 효과)",
         ln=True,
     )
-    pdf.ln(5)
+    pdf.ln(6)
 
-    pdf.set_font("Helvetica", "I", 8)
+    # 하단 안내 문구
+    pdf.set_font_size(8)
     pdf.multi_cell(
         0,
         5,
-        "Note: This report is automatically generated based on the Multiple Linear Regression model trained on PhysioNet clinical dataset (bio.csv). Provided for academic and research reference.",
+        "안내: 본 리포트는 PhysioNet 임상 데이터(bio.csv)를 학습한 다중선형회귀 모델을 기반으로 자동 생성되었습니다.",
     )
 
     return bytes(pdf.output())
@@ -532,8 +510,10 @@ pdf_bytes = create_pdf_report(
     pred_peak=pred_peak,
     glu_delta=glu_delta,
     r2_score=r2_score,
-    fasting_val=fasting_val,
-    a1c_val=a1c_val,
+    fasting_diagnosis=fasting_diagnosis,
+    a1c_diagnosis=a1c_diagnosis,
+    spike_diagnosis=spike_diagnosis,
+    risk_tier_text=risk_tier_text,
     pred_peak_after=pred_peak_after,
     improvement_diff=improvement_diff,
 )
