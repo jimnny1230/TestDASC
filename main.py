@@ -564,3 +564,44 @@ txt_report_content = f"""=======================================================
 - 공복혈당 진단: {fasting_diagnosis}
 - 당화혈색소 진단: {a1c_diagnosis}
 - 혈당 스파이크 판정: {spike_diagnosis}
+- 3단계 대사 리스크 분류: {risk_tier_text}
+- 모델 설명력 (R2 Score): {r2_score:.3f}
+
+3. What-if 개선 시뮬레이션 결과
+- 목표 감량/개선 적용 시 예상 최고 혈당: {pred_peak_after} mg/dL (약 {improvement_diff} mg/dL 개선 효과)
+
+------------------------------------------------------------
+* 본 리포트는 PhysioNet 임상 데이터(bio.csv)를 학습한
+  다중선형회귀 모델을 기반으로 자동 생성되었습니다.
+============================================================
+"""
+
+# PDF 리포트 바이트 생성
+pdf_bytes = create_pdf_report(
+    user_inputs=user_inputs,
+    pred_peak=pred_peak,
+    glu_delta=glu_delta,
+    r2_score=r2_score,
+    fasting_val=fasting_val,
+    a1c_val=a1c_val,
+    pred_peak_after=pred_peak_after,
+    improvement_diff=improvement_diff,
+)
+
+btn_col1, btn_col2 = st.columns(2)
+with btn_col1:
+    st.download_button(
+        label="📕 PDF 리포트 다운로드 (.pdf)",
+        data=pdf_bytes,
+        file_name="health_prediction_report.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
+with btn_col2:
+    st.download_button(
+        label="📄 텍스트 리포트 다운로드 (.txt)",
+        data=txt_report_content,
+        file_name="health_prediction_report.txt",
+        mime="text/plain",
+        use_container_width=True,
+    )
