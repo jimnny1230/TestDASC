@@ -353,4 +353,101 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
             name="실제 임상 데이터 (Samples)",
             marker=dict(
                 size=5,
-                color=z_data
+                color=z_data,
+                colorscale="Viridis",
+                opacity=0.8,
+            ),
+        )
+    )
+
+    fig.add_trace(
+        go.Surface(
+            x=xx,
+            y=yy,
+            z=zz,
+            name="다중회귀 예측 평면",
+            colorscale="Oranges",
+            opacity=0.5,
+            showscale=False,
+        )
+    )
+
+    user_x = user_inputs.get(x_col, x_data.mean())
+    user_y = user_inputs.get(y_col, y_data.mean())
+    fig.add_trace(
+        go.Scatter3d(
+            x=[user_x],
+            y=[user_y],
+            z=[pred_peak],
+            mode="markers+text",
+            name="내 예측 위치 (Current User)",
+            text=[f"예측: {pred_peak} mg/dL"],
+            textposition="top center",
+            marker=dict(
+                size=10,
+                color="red",
+                symbol="diamond",
+            ),
+        )
+    )
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            zaxis_title="예상 최고 혈당 (mg/dL)",
+        ),
+        height=700,
+        margin=dict(l=0, r=0, b=0, t=40),
+        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# 모델 회귀 계수 (가중치) 투명성 공개
+st.subheader("🔍 머신러닝 학습 가중치 (Feature Coefficients)")
+coef_df = pd.DataFrame(
+    {"임상 생체 변수": feature_cols, "회귀 가중치 (Coefficient)": lr_model.coef_}
+)
+st.dataframe(coef_df, use_container_width=True)
+
+st.markdown("---")
+
+# ==============================================================================
+# 7. [아이디어 3 적용] 맞춤형 건강 진단 리포트 다운로드 기능
+# ==============================================================================
+st.subheader("📥 개인별 건강 진단 및 예측 리포트 다운로드")
+st.markdown(
+    "현재 입력한 검사 수치와 예측 결과를 바탕으로 작성된 리포트 파일을 다운로드할 수 있습니다."
+)
+
+report_content = f"""# [임상 데이터 기반 대사 건강 예측 리포트]
+
+## 1. 입력된 임상 검사 수치
+- 공복 혈당 (Fasting GLU): {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL
+- 당화혈색소 (A1c): {user_inputs.get('A1c PDL (Lab)', 'N/A')} %
+- 체질량지수 (BMI): {user_inputs.get('BMI', 'N/A')} kg/m²
+- 공복 인슐린 (Insulin): {user_inputs.get('Insulin', 'N/A')}
+
+## 2. 예측 및 진단 결과
+- 예상 식후 최고 혈당 (Peak): **{pred_peak} mg/dL**
+- 공복혈당 진단: {fasting_diagnosis}
+- 당화혈색소 진단: {a1c_diagnosis}
+- 혈당 스파이크 판정: {spike_diagnosis}
+- 모델 설명력 ($R^2$ Score): {r2_score:.3f}
+
+## 3. What-if 개선 시뮬레이션 결과
+- 목표 감량/개선 적용 시 예상 최고 혈당: **{pred_peak_after} mg/dL** (약 {improvement_diff} mg/dL 개선 효과)
+
+---
+* 본 리포트는 PhysioNet 임상 데이터를 학습한 다중선형회귀 모델을 기반으로 자동 생성되었습니다.
+"""
+
+st.download_button(
+    label="📄 건강 진단 리포트 다운로드 (.md)",
+    data=report_content,
+    file_name="health_prediction_report.md",
+    mime="text/markdown",
+)
