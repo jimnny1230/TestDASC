@@ -1,3 +1,4 @@
+from fpdf import FPDF
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -77,6 +78,128 @@ def train_multiple_regression_model(clean_df, feature_cols):
     model.fit(X, y)
     r2_score = model.score(X, y)
     return model, r2_score
+
+
+def create_pdf_report(
+    user_inputs,
+    pred_peak,
+    glu_delta,
+    r2_score,
+    fasting_val,
+    a1c_val,
+    pred_peak_after,
+    improvement_diff,
+):
+    """임상 예측 결과를 영문 표준 메디컬 리포트 PDF 바이트 데이터로 생성합니다."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(
+        0,
+        12,
+        "Clinical Data-Driven Peak Glucose Prediction Report",
+        ln=True,
+        align="C",
+    )
+    pdf.ln(5)
+
+    # 1. Input Clinical Data
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "1. Input Clinical Biomarkers", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(
+        0,
+        8,
+        f"- Fasting Glucose (Fasting GLU): {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL",
+        ln=True,
+    )
+    pdf.cell(
+        0,
+        8,
+        f"- Hemoglobin A1c (A1c): {user_inputs.get('A1c PDL (Lab)', 'N/A')} %",
+        ln=True,
+    )
+    pdf.cell(
+        0,
+        8,
+        f"- Body Mass Index (BMI): {user_inputs.get('BMI', 'N/A')} kg/m2",
+        ln=True,
+    )
+    pdf.cell(
+        0,
+        8,
+        f"- Fasting Insulin: {user_inputs.get('Insulin', 'N/A')}",
+        ln=True,
+    )
+    pdf.ln(5)
+
+    # 2. Prediction & Clinical Diagnosis
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "2. Prediction & Clinical Risk Assessment", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(
+        0,
+        8,
+        f"- Predicted Postprandial Peak Glucose: {pred_peak} mg/dL (+{glu_delta} mg/dL rise)",
+        ln=True,
+    )
+    pdf.cell(0, 8, f"- Model R2 Score: {r2_score:.3f}", ln=True)
+
+    # Fasting status
+    if fasting_val >= 126:
+        f_stat = "Suspected Diabetes (>= 126 mg/dL)"
+    elif 100 <= fasting_val <= 125:
+        f_stat = "Prediabetes Range (100 - 125 mg/dL)"
+    else:
+        f_stat = "Normal (< 100 mg/dL)"
+    pdf.cell(0, 8, f"- Fasting GLU Diagnosis: {f_stat}", ln=True)
+
+    # A1c status
+    a_stat = (
+        "Suspected Diabetes (>= 6.5%)"
+        if a1c_val >= 6.5
+        else "Normal Range (< 6.5%)"
+    )
+    pdf.cell(0, 8, f"- A1c Diagnosis: {a_stat}", ln=True)
+
+    # Spike status
+    s_stat = (
+        "Glucose Spike Detected (Delta >= 50 or Peak >= 150 mg/dL)"
+        if (glu_delta >= 50 or pred_peak >= 150)
+        else "Stable Glycemic Excursion"
+    )
+    pdf.cell(0, 8, f"- Glucose Spike Check: {s_stat}", ln=True)
+
+    # 3-Tier Risk
+    if pred_peak < 140:
+        tier = "Tier 1: Metabolically Stable (< 140 mg/dL)"
+    elif pred_peak < 180:
+        tier = "Tier 2: Caution / Pre-diabetic Range (140 - 179 mg/dL)"
+    else:
+        tier = "Tier 3: High Risk Alert (>= 180 mg/dL)"
+    pdf.cell(0, 8, f"- 3-Tier Metabolic Risk: {tier}", ln=True)
+    pdf.ln(5)
+
+    # 3. What-if Simulation
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 10, "3. What-if Lifestyle Improvement Simulation", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(
+        0,
+        8,
+        f"- Target Predicted Peak Glucose: {pred_peak_after} mg/dL (Reduction: -{improvement_diff} mg/dL)",
+        ln=True,
+    )
+    pdf.ln(8)
+
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.multi_cell(
+        0,
+        6,
+        "Disclaimer: Generated automatically by a Multiple Linear Regression model trained on PhysioNet clinical dataset (bio.csv). For educational and research purposes only.",
+    )
+
+    return bytes(pdf.output())
 
 
 # ==============================================================================
@@ -217,18 +340,21 @@ st.markdown("---")
 
 st.subheader("📈 [식후 최고 혈당 기준 3단계 대사 리스크 진단]")
 if pred_peak < 140:
+    risk_tier_text = "1. 대사 안정형 (Normal / < 140 mg/dL)"
     st.success(
         f"### 🟢 1. 대사 안정형 (Normal / < 140 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 미만인 경우\n"
         "- **의미**: 탄수화물 섭취 후에도 인슐린 분비와 포도당 대사가 정상적으로 이루어져 혈당이 안정적으로 유지되는 상태입니다. 췌장에 부담이 적고 대사 건강이 양호함을 나타냅니다."
     )
 elif 140 <= pred_peak < 180:
+    risk_tier_text = "2. 주의형 (Pre-diabetic Range / 140 ~ 179 mg/dL)"
     st.warning(
         f"### 🟡 2. 주의형 (Pre-diabetic Range / 140 ~ 179 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 140 mg/dL 이상 180 mg/dL 미만인 경우\n"
         "- **의미**: 내당능 장애(Impaired Glucose Tolerance) 초기 단계나 인슐린 저항성이 다소 진행된 상태를 시사합니다. 식후 혈당이 빠르게 상승하며, 향후 식후 반응성 저혈당이나 만성 대사 질환으로 발전할 수 있어 식단 및 운동 관리가 권장됩니다."
     )
 else:
+    risk_tier_text = "3. 고위험 경보형 (High Risk / ≥ 180 mg/dL)"
     st.error(
         f"### 🔴 3. 고위험 경보형 (High Risk / ≥ 180 mg/dL) — (현재 예측치: {pred_peak} mg/dL)\n"
         "- **기준**: 예상 식후 최고 혈당이 180 mg/dL 이상인 경우\n"
@@ -238,7 +364,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. [아이디어 1 적용] What-if 생활습관 개선 시뮬레이터 (개선 효과 예측)
+# 5. What-if 생활습관 개선 시뮬레이터
 # ==============================================================================
 st.subheader("🔮 [What-if 시뮬레이터] 생활습관 개선에 따른 혈당 변화 예측")
 st.markdown(
@@ -263,7 +389,6 @@ with col_w2:
         step=1.0,
     )
 
-# What-if 적용 입력값 계산
 what_if_inputs = user_inputs.copy()
 if "BMI" in what_if_inputs:
     what_if_inputs["BMI"] = max(10.0, what_if_inputs["BMI"] - bmi_reduction)
@@ -416,38 +541,26 @@ st.dataframe(coef_df, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 7. [아이디어 3 적용] 맞춤형 건강 진단 리포트 다운로드 기능
+# 7. 맞춤형 건강 진단 리포트 다운로드 (PDF & TXT)
 # ==============================================================================
 st.subheader("📥 개인별 건강 진단 및 예측 리포트 다운로드")
 st.markdown(
-    "현재 입력한 검사 수치와 예측 결과를 바탕으로 작성된 리포트 파일을 다운로드할 수 있습니다."
+    "현재 입력한 검사 수치와 예측 결과를 바탕으로 작성된 리포트 파일을 **PDF 또는 TXT** 형식으로 다운로드할 수 있습니다."
 )
 
-report_content = f"""# [임상 데이터 기반 대사 건강 예측 리포트]
+# TXT 리포트 텍스트 생성
+txt_report_content = f"""============================================================
+[임상 데이터 기반 대사 건강 예측 리포트]
+============================================================
 
-## 1. 입력된 임상 검사 수치
+1. 입력된 임상 검사 수치
 - 공복 혈당 (Fasting GLU): {user_inputs.get('Fasting GLU - PDL (Lab)', 'N/A')} mg/dL
 - 당화혈색소 (A1c): {user_inputs.get('A1c PDL (Lab)', 'N/A')} %
 - 체질량지수 (BMI): {user_inputs.get('BMI', 'N/A')} kg/m²
 - 공복 인슐린 (Insulin): {user_inputs.get('Insulin', 'N/A')}
 
-## 2. 예측 및 진단 결과
-- 예상 식후 최고 혈당 (Peak): **{pred_peak} mg/dL**
+2. 예측 및 임상 진단 결과
+- 예상 식후 최고 혈당 (Peak): {pred_peak} mg/dL (+{glu_delta} mg/dL 상승)
 - 공복혈당 진단: {fasting_diagnosis}
 - 당화혈색소 진단: {a1c_diagnosis}
 - 혈당 스파이크 판정: {spike_diagnosis}
-- 모델 설명력 ($R^2$ Score): {r2_score:.3f}
-
-## 3. What-if 개선 시뮬레이션 결과
-- 목표 감량/개선 적용 시 예상 최고 혈당: **{pred_peak_after} mg/dL** (약 {improvement_diff} mg/dL 개선 효과)
-
----
-* 본 리포트는 PhysioNet 임상 데이터를 학습한 다중선형회귀 모델을 기반으로 자동 생성되었습니다.
-"""
-
-st.download_button(
-    label="📄 건강 진단 리포트 다운로드 (.md)",
-    data=report_content,
-    file_name="health_prediction_report.md",
-    mime="text/markdown",
-)
