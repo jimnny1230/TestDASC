@@ -238,7 +238,61 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. 360도 회전 가능한 인터랙티브 3D 회귀 평면 (Plotly 3D)
+# 5. [아이디어 1 적용] What-if 생활습관 개선 시뮬레이터 (개선 효과 예측)
+# ==============================================================================
+st.subheader("🔮 [What-if 시뮬레이터] 생활습관 개선에 따른 혈당 변화 예측")
+st.markdown(
+    "체중(BMI)이나 공복혈당을 조절했을 때, 예상 식후 최고 혈당이 얼마나 낮아지는지 미리 시뮬레이션해 보세요."
+)
+
+col_w1, col_w2 = st.columns(2)
+with col_w1:
+    bmi_reduction = st.slider(
+        "체질량지수(BMI) 감량 목표 (kg/m²)",
+        min_value=0.0,
+        max_value=10.0,
+        value=1.0,
+        step=0.5,
+    )
+with col_w2:
+    fasting_reduction = st.slider(
+        "공복 혈당 개선 목표 (mg/dL)",
+        min_value=0.0,
+        max_value=50.0,
+        value=10.0,
+        step=1.0,
+    )
+
+# What-if 적용 입력값 계산
+what_if_inputs = user_inputs.copy()
+if "BMI" in what_if_inputs:
+    what_if_inputs["BMI"] = max(10.0, what_if_inputs["BMI"] - bmi_reduction)
+if "Fasting GLU - PDL (Lab)" in what_if_inputs:
+    what_if_inputs["Fasting GLU - PDL (Lab)"] = max(
+        60.0, what_if_inputs["Fasting GLU - PDL (Lab)"] - fasting_reduction
+    )
+
+what_if_df = pd.DataFrame([what_if_inputs])
+pred_peak_after = round(lr_model.predict(what_if_df)[0], 1)
+improvement_diff = round(pred_peak - pred_peak_after, 1)
+
+wc1, wc2, wc3 = st.columns(3)
+with wc1:
+    st.metric("현재 예상 최고 혈당", f"{pred_peak} mg/dL")
+with wc2:
+    st.metric(
+        "개선 후 예상 최고 혈당",
+        f"{pred_peak_after} mg/dL",
+        delta=f"-{improvement_diff} mg/dL 감소",
+        delta_color="normal",
+    )
+with wc3:
+    st.metric("개선 효과 진단", "개선 성공적 ✨" if improvement_diff > 0 else "유지 중")
+
+st.markdown("---")
+
+# ==============================================================================
+# 6. 360도 회전 가능한 인터랙티브 3D 회귀 평면 (Plotly 3D)
 # ==============================================================================
 st.subheader("🌐 [360° 인터랙티브 3D 모델] 다중선형회귀 초평면 시각화")
 st.markdown(
@@ -270,7 +324,6 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
     y_data = clean_df[y_col]
     z_data = clean_df["Observed_Peak_GLU"]
 
-    # 회귀 평면 격자 생성
     x_surf = np.linspace(x_data.min(), x_data.max(), 25)
     y_surf = np.linspace(y_data.min(), y_data.max(), 25)
     xx, yy = np.meshgrid(x_surf, y_surf)
@@ -291,7 +344,6 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
 
     fig = go.Figure()
 
-    # 1. 실제 임상 데이터 산점도 (3D Scatter)
     fig.add_trace(
         go.Scatter3d(
             x=x_data,
@@ -301,64 +353,4 @@ if x_col in clean_df.columns and y_col in clean_df.columns:
             name="실제 임상 데이터 (Samples)",
             marker=dict(
                 size=5,
-                color=z_data,
-                colorscale="Viridis",
-                opacity=0.8,
-            ),
-        )
-    )
-
-    # 2. 머신러닝 학습 회귀 평면 (3D Surface)
-    fig.add_trace(
-        go.Surface(
-            x=xx,
-            y=yy,
-            z=zz,
-            name="다중회귀 예측 평면",
-            colorscale="Oranges",
-            opacity=0.5,
-            showscale=False,
-        )
-    )
-
-    # 3. 현재 사용자 입력 위치 강조 표시 (빨간 다이아몬드)
-    user_x = user_inputs.get(x_col, x_data.mean())
-    user_y = user_inputs.get(y_col, y_data.mean())
-    fig.add_trace(
-        go.Scatter3d(
-            x=[user_x],
-            y=[user_y],
-            z=[pred_peak],
-            mode="markers+text",
-            name="내 예측 위치 (Current User)",
-            text=[f"예측: {pred_peak} mg/dL"],
-            textposition="top center",
-            marker=dict(
-                size=10,
-                color="red",
-                symbol="diamond",
-            ),
-        )
-    )
-
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=x_label,
-            yaxis_title=y_label,
-            zaxis_title="예상 최고 혈당 (mg/dL)",
-        ),
-        height=700,
-        margin=dict(l=0, r=0, b=0, t=40),
-        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05),
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-# 모델 회귀 계수 (가중치) 투명성 공개
-st.subheader("🔍 머신러닝 학습 가중치 (Feature Coefficients)")
-coef_df = pd.DataFrame(
-    {"임상 생체 변수": feature_cols, "회귀 가중치 (Coefficient)": lr_model.coef_}
-)
-st.dataframe(coef_df, use_container_width=True)
+                color=z_data
